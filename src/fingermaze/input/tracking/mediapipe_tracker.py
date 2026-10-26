@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,10 @@ class MediaPipeHandTracker:
         self.min_detection_confidence = min_detection_confidence
         self.min_tracking_confidence = min_tracking_confidence
 
+        self.is_pointing: bool = True
+        self.status_message: str = "BUSCANDO DEDO"
+        self.last_landmarks_normalized: list[tuple[float, float]] | None = None
+
         BaseOptions = mp.tasks.BaseOptions
         HandLandmarker = mp.tasks.vision.HandLandmarker
         HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
@@ -69,6 +74,8 @@ class MediaPipeHandTracker:
         detections: list[HandDetection] = []
 
         if not result.hand_landmarks:
+            self.last_landmarks_normalized = None
+            self.status_message = "MUESTRA TU MANO"
             return detections
 
         for hand_lms in result.hand_landmarks:
@@ -84,12 +91,47 @@ class MediaPipeHandTracker:
                 )
 
             if len(landmarks) > INDEX_FINGER_TIP:
+                # Gesture classification: Pointing index vs Open Hand
+                w_x, w_y = landmarks[0].x, landmarks[0].y
+                dist_idx = math.hypot(landmarks[8].x - w_x, landmarks[8].y - w_y)
+                dist_idx_pip = math.hypot(landmarks[6].x - w_x, landmarks[6].y - w_y)
+                idx_extended = dist_idx > (dist_idx_pip * 1.15)
+
+                dist_mid = math.hypot(landmarks[12].x - w_x, landmarks[12].y - w_y)
+                dist_mid_pip = math.hypot(landmarks[10].x - w_x, landmarks[10].y - w_y)
+                mid_folded = dist_mid < (dist_mid_pip * 1.15)
+
+                dist_rng = math.hypot(landmarks[16].x - w_x, landmarks[16].y - w_y)
+                dist_rng_pip = math.hypot(landmarks[14].x - w_x, landmarks[14].y - w_y)
+                rng_folded = dist_rng < (dist_rng_pip * 1.15)
+
+                dist_pnk = math.hypot(landmarks[20].x - w_x, landmarks[20].y - w_y)
+                dist_pnk_pip = math.hypot(landmarks[18].x - w_x, landmarks[18].y - w_y)
+                pnk_folded = dist_pnk < (dist_pnk_pip * 1.15)
+
+                is_open = not mid_folded and not rng_folded and not pnk_folded
+                is_pointing = idx_extended and (mid_folded or rng_folded)
+
+                if is_open:
+                    self.is_pointing = False
+                    self.status_message = "CIERRA EL PUÑO Y APUNTA CON 1 DEDO"
+                    gest_conf = 0.3
+                elif is_pointing:
+                    self.is_pointing = True
+                    self.status_message = "DEDO ÍNDICE (OK)"
+                    gest_conf = 1.0
+                else:
+                    self.is_pointing = True
+                    self.status_message = "DEDO DETECTADO (OK)"
+                    gest_conf = 0.9
+
+                self.last_landmarks_normalized = [(lm.x, lm.y) for lm in landmarks]
                 tip = landmarks[INDEX_FINGER_TIP]
                 detections.append(
                     HandDetection(
                         landmarks=landmarks,
                         index_finger_tip=tip,
-                        confidence=1.0,
+                        confidence=gest_conf,
                     )
                 )
 

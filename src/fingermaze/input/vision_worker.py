@@ -125,38 +125,45 @@ class VisionWorker:
                 pv_w, pv_h = 220, 165
                 small = cv2.resize(frame, (pv_w, pv_h))
 
-                # Draw ONNX 21 landmarks / hand skeleton if available
+                # Draw 21 landmarks / hand skeleton if available
                 last_lms = getattr(self.tracker, "last_landmarks_screen", None)
-                if last_lms is not None:
+                last_norm = getattr(self.tracker, "last_landmarks_normalized", None)
+                connections = [
+                    (0, 1),
+                    (1, 2),
+                    (2, 3),
+                    (3, 4),  # Thumb
+                    (0, 5),
+                    (5, 6),
+                    (6, 7),
+                    (7, 8),  # Index
+                    (0, 9),
+                    (9, 10),
+                    (10, 11),
+                    (11, 12),  # Middle
+                    (0, 13),
+                    (13, 14),
+                    (14, 15),
+                    (15, 16),  # Ring
+                    (0, 17),
+                    (17, 18),
+                    (18, 19),
+                    (19, 20),  # Pinky
+                    (5, 9),
+                    (9, 13),
+                    (13, 17),  # Palm
+                ]
+                bone_color = (0, 230, 120) if is_pointing else (0, 140, 255)
+
+                if last_norm is not None and len(last_norm) >= 21:
+                    pts = [(int(x * pv_w), int(y * pv_h)) for x, y in last_norm]
+                    for p1_idx, p2_idx in connections:
+                        cv2.line(small, pts[p1_idx], pts[p2_idx], bone_color, 1)
+                    for pt in pts:
+                        cv2.circle(small, pt, 2, (255, 255, 255), -1)
+                elif last_lms is not None:
                     scale_x = pv_w / frame.shape[1]
                     scale_y = pv_h / frame.shape[0]
-                    # Draw connections
-                    connections = [
-                        (0, 1),
-                        (1, 2),
-                        (2, 3),
-                        (3, 4),  # Thumb
-                        (0, 5),
-                        (5, 6),
-                        (6, 7),
-                        (7, 8),  # Index
-                        (0, 9),
-                        (9, 10),
-                        (10, 11),
-                        (11, 12),  # Middle
-                        (0, 13),
-                        (13, 14),
-                        (14, 15),
-                        (15, 16),  # Ring
-                        (0, 17),
-                        (17, 18),
-                        (18, 19),
-                        (19, 20),  # Pinky
-                        (5, 9),
-                        (9, 13),
-                        (13, 17),  # Palm
-                    ]
-                    bone_color = (0, 230, 120) if is_pointing else (0, 140, 255)
                     for p1_idx, p2_idx in connections:
                         p1 = (
                             int(last_lms[p1_idx, 0] * scale_x),
@@ -167,15 +174,13 @@ class VisionWorker:
                             int(last_lms[p2_idx, 1] * scale_y),
                         )
                         cv2.line(small, p1, p2, bone_color, 1)
-
-                    # Draw keypoints
                     for i in range(21):
                         pt = (int(last_lms[i, 0] * scale_x), int(last_lms[i, 1] * scale_y))
                         cv2.circle(small, pt, 2, (255, 255, 255), -1)
 
                 # Fallback: Draw contour if using OpenCVHandTracker
                 last_cnt = getattr(self.tracker, "last_contour", None)
-                if last_cnt is not None and last_lms is None:
+                if last_cnt is not None and last_lms is None and last_norm is None:
                     scale_x = pv_w / frame.shape[1]
                     scale_y = pv_h / frame.shape[0]
                     scaled_cnt = np.array(last_cnt * [scale_x, scale_y], dtype=np.int32)
