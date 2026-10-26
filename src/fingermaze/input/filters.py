@@ -80,9 +80,9 @@ class OneEuroFilter2D:
     def __init__(
         self,
         min_cutoff: float = 0.8,
-        beta: float = 0.08,
+        beta: float = 0.35,
         d_cutoff: float = 1.0,
-        deadband: float = 4.5,
+        deadband: float = 3.5,
     ) -> None:
         self.filter_x = OneEuroFilter(min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff)
         self.filter_y = OneEuroFilter(min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff)

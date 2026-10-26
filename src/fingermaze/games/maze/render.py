@@ -33,6 +33,10 @@ COLOR_CURSOR_STUN = (255, 65, 65)
 COLOR_HAND_POINTER = (255, 215, 0)
 COLOR_TEXT_PRIMARY = (245, 248, 252)
 COLOR_TEXT_MUTED = (140, 158, 180)
+COLOR_GOLD = (255, 205, 45)
+COLOR_GOLD_BG = (35, 28, 12)
+COLOR_DELTA_AHEAD = (0, 245, 140)
+COLOR_DELTA_BEHIND = (255, 75, 75)
 
 
 @dataclass
@@ -111,6 +115,39 @@ class MazeRenderer:
                     max_life=life,
                 )
             )
+
+    def spawn_celebration_fireworks(self, width: int, height: int, count: int = 60) -> None:
+        """Spawn radiant multi-colored fireworks across the screen on new record or victory."""
+        colors = [
+            (255, 215, 0),
+            (0, 245, 255),
+            (0, 255, 140),
+            (255, 80, 200),
+            (255, 255, 255),
+        ]
+        origins = [
+            (width * 0.25, height * 0.35),
+            (width * 0.50, height * 0.25),
+            (width * 0.75, height * 0.35),
+        ]
+        for ox, oy in origins:
+            for _ in range(count // len(origins)):
+                angle = random.uniform(0, 2 * math.pi)
+                spd = random.uniform(80.0, 260.0)
+                life = random.uniform(0.6, 1.2)
+                col = random.choice(colors)
+                self.particles.append(
+                    Particle(
+                        x=ox,
+                        y=oy,
+                        vx=math.cos(angle) * spd,
+                        vy=math.sin(angle) * spd,
+                        color=col,
+                        radius=random.uniform(3.0, 6.0),
+                        life=life,
+                        max_life=life,
+                    )
+                )
 
     def update_particles(self, dt: float) -> None:
         """Update and cull active particles."""
@@ -234,6 +271,10 @@ class MazeRenderer:
         sidebar_x: int = 1015,
         sidebar_w: int = 245,
         status_label: str = "BUSCANDO DEDO",
+        record_entry: Any = None,
+        is_new_record: bool = False,
+        shake_ox: int = 0,
+        shake_oy: int = 0,
     ) -> None:
         """Render complete maze arena on left, and zero-overlap HUD sidebar on right."""
         # 1. Clear full window background
@@ -241,19 +282,13 @@ class MazeRenderer:
 
         # 2. Draw Maze Arena panel
         arena_rect = pygame.Rect(
-            int(layout.origin_x - 12),
-            int(layout.origin_y - 12),
+            int(layout.origin_x - 12 + shake_ox),
+            int(layout.origin_y - 12 + shake_oy),
             int(maze_def.grid.cols * layout.cell_width + 24),
             int(maze_def.grid.rows * layout.cell_height + 24),
         )
         pygame.draw.rect(surface, COLOR_ARENA_BG, arena_rect, border_radius=10)
         pygame.draw.rect(surface, COLOR_PANEL_BORDER, arena_rect, width=2, border_radius=10)
-
-        # Screen shake offset during wall stun
-        shake_ox, shake_oy = 0, 0
-        if state.status == GameStatus.PENALTY_STUN and state.penalty_stun_timer > 0.1:
-            shake_ox = random.randint(-3, 3)
-            shake_oy = random.randint(-3, 3)
 
         # 3. Draw Start & Exit zones
         self._draw_cell_highlight(
@@ -328,11 +363,15 @@ class MazeRenderer:
             sidebar_x=sidebar_x,
             sidebar_w=sidebar_w,
             status_label=status_label,
+            record_entry=record_entry,
         )
 
         # 12. Victory Banner overlay if finished
         if state.status == GameStatus.FINISHED:
-            self._draw_victory_banner(surface, state)
+            best_time = record_entry.best_time if record_entry else 75.0
+            self._draw_victory_banner(
+                surface, state, is_new_record=is_new_record, record_best=best_time
+            )
 
     def _draw_luminous_trail(
         self,
@@ -449,8 +488,9 @@ class MazeRenderer:
         sidebar_x: int,
         sidebar_w: int,
         status_label: str = "BUSCANDO DEDO",
+        record_entry: Any = None,
     ) -> None:
-        """Render the sleek right-side HUD panel."""
+        """Render the sleek right-side HUD panel with historic record and speedrun stats."""
         sb_h = surface.get_height() - 24
         panel_rect = pygame.Rect(sidebar_x, 12, sidebar_w, sb_h)
 
@@ -459,13 +499,15 @@ class MazeRenderer:
 
         # App Brand Header
         brand = self.large_font.render("MAZEHAUS", True, COLOR_START)
-        surface.blit(brand, brand.get_rect(center=(sidebar_x + sidebar_w // 2, 38)))
+        surface.blit(brand, brand.get_rect(center=(sidebar_x + sidebar_w // 2, 34)))
 
         # 1. Camera PiP inside Sidebar (centered)
-        pip_w = sidebar_w - 24
+        card_w = sidebar_w - 24
+        card_x = sidebar_x + 12
+        pip_w = card_w
         pip_h = int(pip_w * 0.75)  # 4:3 ratio
-        pip_x = sidebar_x + 12
-        pip_y = 65
+        pip_x = card_x
+        pip_y = 52
         self._draw_camera_pip(
             surface,
             camera_preview,
@@ -477,56 +519,72 @@ class MazeRenderer:
             status_text=status_label,
         )
 
-        # 2. Stats Card Container
-        stats_y = pip_y + pip_h + 36
-        card_w = sidebar_w - 24
-        card_x = sidebar_x + 12
+        # 2. 🏆 Historic Record Card (Competitive High Score)
+        rec_y = pip_y + pip_h + 34
+        rec_h = 70
+        rec_rect = pygame.Rect(card_x, rec_y, card_w, rec_h)
+        pygame.draw.rect(surface, COLOR_GOLD_BG, rec_rect, border_radius=8)
+        pygame.draw.rect(surface, COLOR_GOLD, rec_rect, width=2, border_radius=8)
 
-        # Card: Time
-        self._draw_stat_card(
-            surface=surface,
-            x=card_x,
-            y=stats_y,
-            w=card_w,
-            h=62,
-            label="TIEMPO TRANSCURRIDO",
-            value=f"{state.elapsed_time:.1f} s",
-            val_color=COLOR_TEXT_PRIMARY,
-        )
+        rec_lbl = self.small_font.render("🏆 RÉCORD HISTÓRICO", True, COLOR_GOLD)
+        surface.blit(rec_lbl, (card_x + 10, rec_y + 8))
 
-        # Card: Penalties
+        best_time_val = float(record_entry.best_time) if record_entry else 75.0
+        holder_val = str(record_entry.holder_name) if record_entry else "HAUS MASTER"
+        time_str = f"{best_time_val:.2f} s"
+        val_s = self.digital_font.render(time_str, True, COLOR_GOLD)
+        surface.blit(val_s, (card_x + 10, rec_y + 26))
+
+        holder_s = self.small_font.render(f"👤 {holder_val}", True, (220, 195, 130))
+        surface.blit(holder_s, (card_x + 10, rec_y + 50))
+
+        # 3. ⚡ Current Run Card (Live Speedrun Timer & Delta)
+        run_y = rec_y + rec_h + 8
+        run_h = 82
+        run_rect = pygame.Rect(card_x, run_y, card_w, run_h)
+        pygame.draw.rect(surface, (15, 20, 30), run_rect, border_radius=8)
+        pygame.draw.rect(surface, (30, 42, 60), run_rect, width=1, border_radius=8)
+
+        run_lbl = self.small_font.render("⚡ CARRERA ACTUAL", True, (0, 220, 255))
+        surface.blit(run_lbl, (card_x + 10, run_y + 8))
+
+        curr_time_str = f"{state.elapsed_time:.2f} s"
+        curr_val_s = self.digital_font.render(curr_time_str, True, COLOR_TEXT_PRIMARY)
+        surface.blit(curr_val_s, (card_x + 10, run_y + 26))
+
+        # Live delta comparison vs historic record
+        delta = state.elapsed_time - best_time_val
+        if state.status in (GameStatus.PLAYING, GameStatus.FINISHED):
+            if delta < 0:
+                delta_str = f"-{abs(delta):.1f}s ▲ ADELANTE"
+                delta_col = COLOR_DELTA_AHEAD
+            else:
+                delta_str = f"+{delta:.1f}s ▼ ATRÁS"
+                delta_col = COLOR_DELTA_BEHIND
+            delta_surf = self.small_font.render(delta_str, True, delta_col)
+            surface.blit(delta_surf, (card_x + 10, run_y + 56))
+
+        # 4. Checkpoints & Penalties Card
+        stat_y = run_y + run_h + 8
+        stat_h = 58
+        stat_rect = pygame.Rect(card_x, stat_y, card_w, stat_h)
+        pygame.draw.rect(surface, (15, 20, 30), stat_rect, border_radius=8)
+        pygame.draw.rect(surface, (30, 42, 60), stat_rect, width=1, border_radius=8)
+
+        cp_total = max(1, len(maze_def.checkpoints) - 1)
+        cp_curr = min(cp_total, state.active_checkpoint_idx)
+        cp_s = self.small_font.render(f"CHECKPOINTS: {cp_curr}/{cp_total}", True, COLOR_CHECKPOINT)
+        surface.blit(cp_s, (card_x + 10, stat_y + 10))
+
         pen_color = COLOR_CURSOR_STUN if state.total_penalties > 0 else COLOR_START
-        pen_str = f"{state.total_penalties} (+{state.total_penalties * state.wall_penalty_s:.1f}s)"
-        self._draw_stat_card(
-            surface=surface,
-            x=card_x,
-            y=stats_y + 72,
-            w=card_w,
-            h=62,
-            label="PENALIZACIONES",
-            value=pen_str,
-            val_color=pen_color,
-        )
+        pen_s = self.small_font.render(f"CHOQUES: {state.total_penalties}", True, pen_color)
+        surface.blit(pen_s, (card_x + 10, stat_y + 32))
 
-        # Card: Checkpoints & Progress
-        cp_total = len(maze_def.checkpoints)
-        cp_curr = min(cp_total, state.active_checkpoint_idx + 1)
-        self._draw_stat_card(
-            surface=surface,
-            x=card_x,
-            y=stats_y + 144,
-            w=card_w,
-            h=62,
-            label="CHECKPOINTS",
-            value=f"{cp_curr} / {cp_total}",
-            val_color=COLOR_CHECKPOINT,
-        )
-
-        # 3. Dynamic Status Notification
-        notif_y = stats_y + 218
+        # 5. Dynamic Status Notification
+        notif_y = stat_y + stat_h + 8
         if state.status == GameStatus.WAITING_FOR_TOUCH:
             target = "INICIO" if state.active_checkpoint_idx == 0 else "CHECKPOINT"
-            msg = f"Toca {target} para trazar"
+            msg = f"Toca {target} para arrancar"
             m_color = COLOR_START
         elif state.status == GameStatus.PENALTY_STUN:
             msg = "¡Choque! Vuelve al punto"
@@ -536,18 +594,18 @@ class MazeRenderer:
             m_color = COLOR_TEXT_MUTED
 
         lbl_surf = self.small_font.render(msg, True, m_color)
-        notif_bg = pygame.Rect(card_x, notif_y, card_w, 28)
+        notif_bg = pygame.Rect(card_x, notif_y, card_w, 26)
         pygame.draw.rect(surface, (15, 20, 30), notif_bg, border_radius=5)
         surface.blit(lbl_surf, lbl_surf.get_rect(center=notif_bg.center))
 
-        # 4. Keyboard Shortcuts Footer
-        footer_y = sb_h - 75
+        # 6. Keyboard Shortcuts Footer
+        footer_y = sb_h - 45
         keys = [
-            ("[R] Nuevo", COLOR_TEXT_MUTED),
+            ("[R] Reiniciar", COLOR_TEXT_MUTED),
             ("[C] Calibrar", COLOR_TEXT_MUTED),
-            ("[P] Pausar", COLOR_TEXT_MUTED),
+            ("[P] Pausa", COLOR_TEXT_MUTED),
         ]
-        kx = card_x + 10
+        kx = card_x + 6
         for key_text, kcol in keys:
             ksurf = self.small_font.render(key_text, True, kcol)
             surface.blit(ksurf, (kx, footer_y))
@@ -606,34 +664,79 @@ class MazeRenderer:
         )
         pygame.draw.rect(surface, border_color, pip_rect, width=2, border_radius=6)
 
+        # Cyber-corner L brackets for authentic arcade feel
+        c_len = 10
+        pygame.draw.line(surface, (0, 245, 255), (x - 2, y - 2), (x - 2 + c_len, y - 2), width=2)
+        pygame.draw.line(surface, (0, 245, 255), (x - 2, y - 2), (x - 2, y - 2 + c_len), width=2)
+        pygame.draw.line(
+            surface, (0, 245, 255), (x + w + 2, y - 2), (x + w + 2 - c_len, y - 2), width=2
+        )
+        pygame.draw.line(
+            surface, (0, 245, 255), (x + w + 2, y - 2), (x + w + 2, y - 2 + c_len), width=2
+        )
+        pygame.draw.line(
+            surface, (0, 245, 255), (x - 2, y + h + 2), (x - 2 + c_len, y + h + 2), width=2
+        )
+        pygame.draw.line(
+            surface, (0, 245, 255), (x - 2, y + h + 2), (x - 2, y + h + 2 - c_len), width=2
+        )
+        pygame.draw.line(
+            surface, (0, 245, 255), (x + w + 2, y + h + 2), (x + w + 2 - c_len, y + h + 2), width=2
+        )
+        pygame.draw.line(
+            surface, (0, 245, 255), (x + w + 2, y + h + 2), (x + w + 2, y + h + 2 - c_len), width=2
+        )
+
         # Status badge below preview
         bg_badge = pygame.Rect(x, y + h + 4, w, 22)
         pygame.draw.rect(surface, (14, 18, 26), bg_badge, border_radius=4)
         badge_surf = self.small_font.render(status_text, True, border_color)
         surface.blit(badge_surf, badge_surf.get_rect(center=bg_badge.center))
 
-    def _draw_victory_banner(self, surface: pygame.Surface, state: PlayerGameState) -> None:
+    def _draw_victory_banner(
+        self,
+        surface: pygame.Surface,
+        state: PlayerGameState,
+        is_new_record: bool = False,
+        record_best: float = 75.0,
+    ) -> None:
         w, h = surface.get_width(), surface.get_height()
-        box_w, box_h = 680, 170
+        box_w, box_h = 700, 180
         rect = pygame.Rect((w - box_w) // 2, (h - box_h) // 2, box_w, box_h)
 
         overlay = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        overlay.fill((10, 15, 24, 240))
+        overlay.fill((10, 15, 24, 245))
         surface.blit(overlay, rect.topleft)
-        pygame.draw.rect(surface, COLOR_EXIT, rect, width=3, border_radius=12)
 
-        banner = self.large_font.render("¡LABERINTO COMPLETADO!", True, COLOR_EXIT)
-        score_txt = self.font.render(
-            f"Tiempo Final: {state.total_score_time:.1f}s   (Base: {state.elapsed_time:.1f}s + Penalizaciones: {state.total_penalties * state.wall_penalty_s:.1f}s)",
-            True,
-            COLOR_TEXT_PRIMARY,
-        )
-        sub = self.small_font.render(
-            "Presiona [R] para jugar un nuevo laberinto (o [C] para recalibrar)",
-            True,
-            COLOR_TEXT_MUTED,
-        )
+        border_col = COLOR_GOLD if is_new_record else COLOR_EXIT
+        pygame.draw.rect(surface, border_col, rect, width=3, border_radius=12)
 
-        surface.blit(banner, banner.get_rect(center=(w // 2, h // 2 - 40)))
+        if is_new_record:
+            banner = self.large_font.render("🏆 ¡¡NUEVO RÉCORD HISTÓRICO!! 🏆", True, COLOR_GOLD)
+            score_txt = self.large_font.render(
+                f"TIEMPO RÉCORD: {state.elapsed_time:.2f} s",
+                True,
+                (255, 255, 255),
+            )
+            sub = self.font.render(
+                "¡Eres el nuevo Maestro de MazeHaus! Presiona [R] para defender tu marca",
+                True,
+                COLOR_GOLD,
+            )
+        else:
+            banner = self.large_font.render("¡LABERINTO COMPLETADO!", True, COLOR_EXIT)
+            delta = state.elapsed_time - record_best
+            score_txt = self.font.render(
+                f"Tiempo: {state.elapsed_time:.2f}s   |   Récord a batir: {record_best:.2f}s (+{delta:.1f}s)",
+                True,
+                COLOR_TEXT_PRIMARY,
+            )
+            sub = self.small_font.render(
+                "Presiona [R] para intentar de nuevo y batir el récord histórico",
+                True,
+                COLOR_TEXT_MUTED,
+            )
+
+        surface.blit(banner, banner.get_rect(center=(w // 2, h // 2 - 45)))
         surface.blit(score_txt, score_txt.get_rect(center=(w // 2, h // 2 + 5)))
-        surface.blit(sub, sub.get_rect(center=(w // 2, h // 2 + 50)))
+        surface.blit(sub, sub.get_rect(center=(w // 2, h // 2 + 52)))

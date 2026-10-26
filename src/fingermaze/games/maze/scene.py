@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 from enum import Enum, auto
 from typing import Any
 
@@ -13,6 +14,7 @@ from fingermaze.core.ports import InputProvider, Scene
 from fingermaze.core.types import InputSnapshot, PlayerId, TrackingState
 from fingermaze.games.maze.domain.collision import MazeCollisionDetector, MazeLayout
 from fingermaze.games.maze.domain.generator import MazeDefinition, generate_maze
+from fingermaze.games.maze.domain.records import RecordStore
 from fingermaze.games.maze.domain.scoring import GameStatus, PlayerGameState
 from fingermaze.games.maze.render import MazeRenderer
 
@@ -45,6 +47,12 @@ class MazeScene(Scene):
         self.sidebar_w = 245
         self.sidebar_x = self.config.display.width - self.sidebar_w - 12
 
+        # High score record persistence & Arcade Feedback
+        self.record_store = RecordStore(self.config.maze.records_path)
+        self.has_processed_finish = False
+        self.is_new_record = False
+        self.screen_shake_time = 0.0
+
         # Calibration & Countdown states
         self.phase = ScenePhase.CALIBRATING
         self.dwell_timer: float = 0.0
@@ -76,8 +84,12 @@ class MazeScene(Scene):
             cursor_radius=float(self.config.maze.cursor_radius),
         )
 
+        # Single master map seed for strictly fair competitive leaderboard
         start_cell = (cols // 2, rows // 2)
-        self.maze_def: MazeDefinition = generate_maze(cols=cols, rows=rows, start_cell=start_cell)
+        seed = self.config.maze.master_seed
+        self.maze_def: MazeDefinition = generate_maze(
+            cols=cols, rows=rows, seed=seed, start_cell=start_cell
+        )
         self.collision_detector = MazeCollisionDetector(self.maze_def.grid, self.layout)
         self.player_state = PlayerGameState(
             maze_def=self.maze_def,
@@ -85,6 +97,9 @@ class MazeScene(Scene):
             wall_penalty_s=self.config.maze.wall_penalty_seconds,
         )
         self.last_checkpoint_seen = 0
+        self.has_processed_finish = False
+        self.is_new_record = False
+        self.screen_shake_time = 0.0
 
     def get_arena_center(self) -> tuple[float, float]:
         """Exact center coordinates of the playable maze arena."""
@@ -168,10 +183,12 @@ class MazeScene(Scene):
             return
 
         # 3. Main Gameplay phase
+        self.screen_shake_time = max(0.0, self.screen_shake_time - dt)
         prev_pos = self.player_state.current_pos
         has_collision = self.collision_detector.check_wall_collision(prev_pos, target_pos)
 
         if has_collision and self.player_state.status == GameStatus.PLAYING:
+            self.screen_shake_time = 0.22  # Arcade impact shake
             self.renderer.spawn_sparks(target_pos[0], target_pos[1], (255, 65, 65), count=16)
 
         old_status = self.player_state.status
@@ -181,11 +198,22 @@ class MazeScene(Scene):
         if self.player_state.active_checkpoint_idx > self.last_checkpoint_seen:
             self.last_checkpoint_seen = self.player_state.active_checkpoint_idx
             cp_x, cp_y = self.player_state.current_checkpoint_pos()
-            self.renderer.spawn_sparks(cp_x, cp_y, (0, 230, 140), count=18)
+            self.renderer.spawn_sparks(cp_x, cp_y, (0, 230, 140), count=22)
 
         if old_status != GameStatus.FINISHED and self.player_state.status == GameStatus.FINISHED:
-            ex_x, ex_y = self.layout.cell_to_pixel_center(*self.maze_def.exit_cell)
-            self.renderer.spawn_sparks(ex_x, ex_y, (255, 205, 30), count=40, speed=180.0)
+            if not self.has_processed_finish:
+                self.has_processed_finish = True
+                self.is_new_record = self.record_store.check_and_update(
+                    self.player_state.elapsed_time
+                )
+                if self.is_new_record:
+                    # Explosive golden victory fireworks across entire screen
+                    self.renderer.spawn_celebration_fireworks(
+                        self.config.display.width, self.config.display.height, count=80
+                    )
+                else:
+                    ex_x, ex_y = self.layout.cell_to_pixel_center(*self.maze_def.exit_cell)
+                    self.renderer.spawn_sparks(ex_x, ex_y, (255, 205, 30), count=40, speed=180.0)
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.phase == ScenePhase.CALIBRATING:
@@ -201,6 +229,11 @@ class MazeScene(Scene):
             )
             return
 
+        shake_ox, shake_oy = 0, 0
+        if self.screen_shake_time > 0.0:
+            shake_ox = random.randint(-6, 6)
+            shake_oy = random.randint(-6, 6)
+
         self.renderer.draw(
             surface=surface,
             maze_def=self.maze_def,
@@ -212,6 +245,10 @@ class MazeScene(Scene):
             sidebar_x=self.sidebar_x,
             sidebar_w=self.sidebar_w,
             status_label=getattr(self, "camera_status_label", "BUSCANDO DEDO"),
+            record_entry=self.record_store.current_record,
+            is_new_record=self.is_new_record,
+            shake_ox=shake_ox,
+            shake_oy=shake_oy,
         )
 
         if self.phase == ScenePhase.COUNTDOWN:

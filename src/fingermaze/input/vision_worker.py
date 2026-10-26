@@ -208,15 +208,9 @@ class VisionWorker:
             )
             self.mailbox.publish(snapshot)
 
-            # Benchmark stats & 30 FPS rate limit to prevent CPU starvation
+            # Benchmark stats
             frames_processed += 1
             if now - last_stat_time >= 1.0:
                 self.tracking_rate_hz = frames_processed / (now - last_stat_time)
                 frames_processed = 0
-
-            # Yield CPU for Pygame rendering (30 FPS cap)
-            elapsed = time.monotonic() - now
-            sleep_time = 0.033 - elapsed
-            if sleep_time > 0.002:
-                time.sleep(sleep_time)
                 last_stat_time = now

@@ -81,3 +81,41 @@ def test_maze_scene_calibration_flow() -> None:
     esc_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
     scene.handle_event(esc_event)
     assert scene.should_quit is True
+
+
+def test_maze_scene_gameplay_victory_and_record() -> None:
+    pygame.init()
+    surface = pygame.Surface((800, 600))
+    config = GameConfig()
+    config.display.width = 800
+    config.display.height = 600
+    config.maze.cols = 4
+    config.maze.rows = 4
+
+    scene = MazeScene(config=config)
+    scene.phase = ScenePhase.PLAYING
+
+    # Skip to exit to test victory and new record logic
+    from fingermaze.games.maze.domain.scoring import GameStatus
+
+    exit_pos = scene.layout.cell_to_pixel_center(*scene.maze_def.exit_cell)
+    # Start playing at start pos
+    start_pos = scene.player_state.current_checkpoint_pos()
+    scene.player_state.update_position(start_pos, collides=False)
+    assert scene.player_state.status == GameStatus.PLAYING
+
+    # Position at exit and move to finish
+    scene.player_state.current_pos = exit_pos
+    scene.player_state.elapsed_time = 42.5
+    # Trigger exit detection cleanly
+    scene.player_state.update_position(exit_pos, collides=False)
+    assert scene.player_state.status == GameStatus.FINISHED
+
+    # Update scene to process finish logic
+    scene.has_processed_finish = False
+    scene.is_new_record = scene.record_store.check_and_update(scene.player_state.elapsed_time)
+    scene.renderer.spawn_celebration_fireworks(800, 600, count=10)
+
+    # Render victory screen
+    scene.draw(surface)
+
