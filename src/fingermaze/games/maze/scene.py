@@ -1,4 +1,4 @@
-"""Single-player maze gameplay scene with center calibration and pacing."""
+"""Single-player maze gameplay scene with dedicated sidebar and particle effects."""
 
 from __future__ import annotations
 
@@ -41,12 +41,17 @@ class MazeScene(Scene):
         self.latest_hand_pos: tuple[float, float] | None = None
         self.camera_preview: Any = None
 
+        # Sidebar positioning (Zero overlap with maze)
+        self.sidebar_w = 245
+        self.sidebar_x = self.config.display.width - self.sidebar_w - 12
+
         # Calibration & Countdown states
         self.phase = ScenePhase.CALIBRATING
         self.dwell_timer: float = 0.0
         self.dwell_required: float = 0.8
         self.countdown_val: int = 3
         self.countdown_timer: float = 0.0
+        self.last_checkpoint_seen = 0
 
         self._reset_game()
 
@@ -54,10 +59,11 @@ class MazeScene(Scene):
         cols = self.config.maze.cols
         rows = self.config.maze.rows
 
-        margin_x = 60.0
-        margin_y = 80.0
-        available_w = self.config.display.width - 2 * margin_x
-        available_h = self.config.display.height - margin_y - 40.0
+        # Dedicated arena rectangle on the left
+        margin_x = 20.0
+        margin_y = 20.0
+        available_w = float(self.sidebar_x - margin_x - 14.0)
+        available_h = float(self.config.display.height - 2 * margin_y)
 
         cell_w = available_w / cols
         cell_h = available_h / rows
@@ -80,6 +86,7 @@ class MazeScene(Scene):
             layout=self.layout,
             wall_penalty_s=self.config.maze.wall_penalty_seconds,
         )
+        self.last_checkpoint_seen = 0
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.QUIT:
@@ -90,7 +97,6 @@ class MazeScene(Scene):
             elif event.key == pygame.K_r:
                 self._reset_game()
                 self.phase = ScenePhase.PLAYING
-                # Immediate engagement at start cell
                 start_pos = self.player_state.current_checkpoint_pos()
                 self.player_state.update_position(start_pos, collides=False)
             elif event.key == pygame.K_c:
@@ -101,6 +107,7 @@ class MazeScene(Scene):
 
     def update(self, dt: float, inputs: InputSnapshot) -> None:
         self.camera_preview = inputs.camera_preview
+        self.renderer.update_particles(dt)
 
         if self.is_paused:
             return
@@ -128,7 +135,6 @@ class MazeScene(Scene):
             if dist_to_center <= 60.0:
                 self.dwell_timer += dt
                 if self.dwell_timer >= self.dwell_required:
-                    # Calibrate mapper with raw camera normalized coordinates
                     if self.input_provider and hasattr(self.input_provider, "calibrate_center"):
                         self.input_provider.calibrate_center(ptr.raw_norm[0], ptr.raw_norm[1])
                     self.phase = ScenePhase.COUNTDOWN
@@ -146,7 +152,6 @@ class MazeScene(Scene):
                 self.countdown_val -= 1
                 if self.countdown_val < 0:
                     self.phase = ScenePhase.PLAYING
-                    # Auto engage trace since finger is already at center start cell
                     start_pos = self.player_state.current_checkpoint_pos()
                     self.player_state.update_position(start_pos, collides=False)
             return
@@ -154,8 +159,25 @@ class MazeScene(Scene):
         # 3. Main Gameplay phase
         prev_pos = self.player_state.current_pos
         has_collision = self.collision_detector.check_wall_collision(prev_pos, target_pos)
+
+        # Trigger spark effects on events
+        if has_collision and self.player_state.status == GameStatus.PLAYING:
+            self.renderer.spawn_sparks(target_pos[0], target_pos[1], (255, 65, 65), count=16)
+
+        old_status = self.player_state.status
         self.player_state.update_position(target_pos, collides=has_collision)
         self.player_state.tick_time(dt)
+
+        # Reached checkpoint particle celebration
+        if self.player_state.active_checkpoint_idx > self.last_checkpoint_seen:
+            self.last_checkpoint_seen = self.player_state.active_checkpoint_idx
+            cp_x, cp_y = self.player_state.current_checkpoint_pos()
+            self.renderer.spawn_sparks(cp_x, cp_y, (0, 230, 140), count=18)
+
+        # Victory celebration
+        if old_status != GameStatus.FINISHED and self.player_state.status == GameStatus.FINISHED:
+            ex_x, ex_y = self.layout.cell_to_pixel_center(*self.maze_def.exit_cell)
+            self.renderer.spawn_sparks(ex_x, ex_y, (255, 205, 30), count=40, speed=180.0)
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.phase == ScenePhase.CALIBRATING:
@@ -169,7 +191,7 @@ class MazeScene(Scene):
             )
             return
 
-        # Draw base maze
+        # Draw base maze + dedicated sidebar
         self.renderer.draw(
             surface=surface,
             maze_def=self.maze_def,
@@ -178,6 +200,8 @@ class MazeScene(Scene):
             hand_pos=self.latest_hand_pos,
             camera_preview=self.camera_preview,
             hand_detected=self.hand_detected,
+            sidebar_x=self.sidebar_x,
+            sidebar_w=self.sidebar_w,
         )
 
         if self.phase == ScenePhase.COUNTDOWN:
@@ -203,9 +227,9 @@ class MazeScene(Scene):
         rect = pygame.Rect((w - box_w) // 2, (h - box_h) // 2, box_w, box_h)
 
         overlay = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-        overlay.fill((15, 20, 25, 235))
+        overlay.fill((10, 15, 22, 240))
         surface.blit(overlay, rect.topleft)
-        pygame.draw.rect(surface, border_color, rect, width=2, border_radius=6)
+        pygame.draw.rect(surface, border_color, rect, width=2, border_radius=8)
 
         t_surf = self.renderer.large_font.render(title, True, border_color)
         s_surf = self.renderer.font.render(subtitle, True, (240, 240, 240))

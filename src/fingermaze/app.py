@@ -51,7 +51,15 @@ def create_input_provider(config: GameConfig) -> InputProvider:
         worker = VisionWorker(camera=camera, tracker=tracker, mailbox=mailbox)
         worker.start()
 
-        viewport = Viewport(x=0, y=0, width=config.display.width, height=config.display.height)
+        # Viewport maps directly to the dedicated maze arena (left of sidebar)
+        sidebar_w = 245
+        sidebar_x = config.display.width - sidebar_w - 12
+        margin_x = 20
+        margin_y = 20
+        arena_w = sidebar_x - margin_x - 14
+        arena_h = config.display.height - 2 * margin_y
+
+        viewport = Viewport(x=margin_x, y=margin_y, width=arena_w, height=arena_h)
         mapper = CoordinateMapper(viewport=viewport)
 
         logger.info("Vision pipeline successfully initialized and started!")
