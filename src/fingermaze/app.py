@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from fingermaze.config.settings import GameConfig, load_config
 from fingermaze.core.loop import GameLoop
@@ -15,10 +16,28 @@ from fingermaze.input.mailbox import LatestValueMailbox
 from fingermaze.input.mapping import CoordinateMapper
 from fingermaze.input.mouse_input import MouseInputProvider
 from fingermaze.input.tracking.mediapipe_tracker import MediaPipeHandTracker
+from fingermaze.input.tracking.opencv_tracker import OpenCVHandTracker
 from fingermaze.input.vision_input import VisionInputProvider
 from fingermaze.input.vision_worker import RawDetectionSnapshot, VisionWorker
 
 logger = logging.getLogger(__name__)
+
+
+def cpu_supports_aes() -> bool:
+    """Check if host CPU supports hardware AES instructions required by generic MediaPipe wheels."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("Features") or line.startswith("flags"):
+                    return "aes" in line.lower()
+    except Exception:
+        pass
+    import platform
+
+    machine = platform.machine().lower()
+    if "arm" in machine or "aarch64" in machine:
+        return False
+    return True
 
 
 def create_input_provider(config: GameConfig) -> InputProvider:
@@ -41,12 +60,22 @@ def create_input_provider(config: GameConfig) -> InputProvider:
             fps=config.camera.fps,
             mirror=config.camera.mirror,
         )
-        tracker = MediaPipeHandTracker(
-            model_path=model_path,
-            num_hands=config.tracking.num_hands,
-            min_detection_confidence=config.tracking.min_detection_confidence,
-            min_tracking_confidence=config.tracking.min_tracking_confidence,
-        )
+
+        # Select tracker backend based on CPU capabilities
+        if not cpu_supports_aes():
+            logger.info(
+                "Cortex CPU lacks hardware AES extension (Raspberry Pi). Using native OpenCV Tracker."
+            )
+            tracker: Any = OpenCVHandTracker()
+        else:
+            logger.info("Host CPU supports AES. Using MediaPipe Hand Landmarker.")
+            tracker = MediaPipeHandTracker(
+                model_path=model_path,
+                num_hands=config.tracking.num_hands,
+                min_detection_confidence=config.tracking.min_detection_confidence,
+                min_tracking_confidence=config.tracking.min_tracking_confidence,
+            )
+
         mailbox: LatestValueMailbox[RawDetectionSnapshot] = LatestValueMailbox()
         worker = VisionWorker(camera=camera, tracker=tracker, mailbox=mailbox)
         worker.start()

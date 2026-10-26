@@ -14,7 +14,6 @@ import pygame
 from fingermaze.core.ports import CameraSource
 from fingermaze.core.types import PlayerId
 from fingermaze.input.mailbox import LatestValueMailbox
-from fingermaze.input.tracking.mediapipe_tracker import MediaPipeHandTracker
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class VisionWorker:
     def __init__(
         self,
         camera: CameraSource,
-        tracker: MediaPipeHandTracker,
+        tracker: Any,
         mailbox: LatestValueMailbox[RawDetectionSnapshot],
     ) -> None:
         self.camera = camera
