@@ -115,32 +115,79 @@ class VisionWorker:
                         )
                     )
 
-            # Generate downscaled preview surface with tracking landmarks & contour
+            # Generate downscaled preview surface with tracking landmarks & skeleton
             preview_surf = None
             status_label = getattr(
                 self.tracker, "status_message", "BUSCANDO DEDO" if not samples else "DEDO DETECTADO"
             )
             is_pointing = getattr(self.tracker, "is_pointing", True)
             try:
-                pv_w, pv_h = 200, 150
+                pv_w, pv_h = 220, 165
                 small = cv2.resize(frame, (pv_w, pv_h))
 
-                # Draw outline of detected hand contour (green if pointing, orange/amber if open hand)
+                # Draw ONNX 21 landmarks / hand skeleton if available
+                last_lms = getattr(self.tracker, "last_landmarks_screen", None)
+                if last_lms is not None:
+                    scale_x = pv_w / frame.shape[1]
+                    scale_y = pv_h / frame.shape[0]
+                    # Draw connections
+                    connections = [
+                        (0, 1),
+                        (1, 2),
+                        (2, 3),
+                        (3, 4),  # Thumb
+                        (0, 5),
+                        (5, 6),
+                        (6, 7),
+                        (7, 8),  # Index
+                        (0, 9),
+                        (9, 10),
+                        (10, 11),
+                        (11, 12),  # Middle
+                        (0, 13),
+                        (13, 14),
+                        (14, 15),
+                        (15, 16),  # Ring
+                        (0, 17),
+                        (17, 18),
+                        (18, 19),
+                        (19, 20),  # Pinky
+                        (5, 9),
+                        (9, 13),
+                        (13, 17),  # Palm
+                    ]
+                    bone_color = (0, 230, 120) if is_pointing else (0, 140, 255)
+                    for p1_idx, p2_idx in connections:
+                        p1 = (
+                            int(last_lms[p1_idx, 0] * scale_x),
+                            int(last_lms[p1_idx, 1] * scale_y),
+                        )
+                        p2 = (
+                            int(last_lms[p2_idx, 0] * scale_x),
+                            int(last_lms[p2_idx, 1] * scale_y),
+                        )
+                        cv2.line(small, p1, p2, bone_color, 1)
+
+                    # Draw keypoints
+                    for i in range(21):
+                        pt = (int(last_lms[i, 0] * scale_x), int(last_lms[i, 1] * scale_y))
+                        cv2.circle(small, pt, 2, (255, 255, 255), -1)
+
+                # Fallback: Draw contour if using OpenCVHandTracker
                 last_cnt = getattr(self.tracker, "last_contour", None)
-                if last_cnt is not None:
+                if last_cnt is not None and last_lms is None:
                     scale_x = pv_w / frame.shape[1]
                     scale_y = pv_h / frame.shape[0]
                     scaled_cnt = np.array(last_cnt * [scale_x, scale_y], dtype=np.int32)
-                    contour_color = (0, 230, 120) if is_pointing else (0, 140, 255)  # BGR
+                    contour_color = (0, 230, 120) if is_pointing else (0, 140, 255)
                     cv2.drawContours(small, [scaled_cnt], -1, contour_color, 2)
 
-                # Draw yellow crosshair on fingertip when pointing
-                if is_pointing:
-                    for s in samples:
-                        fx = max(0, min(pv_w - 1, int(s.norm_x * pv_w)))
-                        fy = max(0, min(pv_h - 1, int(s.norm_y * pv_h)))
-                        cv2.circle(small, (fx, fy), 5, (0, 240, 255), -1)
-                        cv2.circle(small, (fx, fy), 8, (255, 255, 255), 1)
+                # Draw prominent yellow crosshair on index fingertip
+                for s in samples:
+                    fx = max(0, min(pv_w - 1, int(s.norm_x * pv_w)))
+                    fy = max(0, min(pv_h - 1, int(s.norm_y * pv_h)))
+                    cv2.circle(small, (fx, fy), 5, (0, 240, 255), -1)
+                    cv2.circle(small, (fx, fy), 8, (255, 255, 255), 1)
 
                 small_rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                 preview_surf = pygame.image.frombuffer(small_rgb.tobytes(), (pv_w, pv_h), "RGB")
@@ -156,9 +203,15 @@ class VisionWorker:
             )
             self.mailbox.publish(snapshot)
 
-            # Benchmark stats
+            # Benchmark stats & 30 FPS rate limit to prevent CPU starvation
             frames_processed += 1
             if now - last_stat_time >= 1.0:
                 self.tracking_rate_hz = frames_processed / (now - last_stat_time)
                 frames_processed = 0
+
+            # Yield CPU for Pygame rendering (30 FPS cap)
+            elapsed = time.monotonic() - now
+            sleep_time = 0.033 - elapsed
+            if sleep_time > 0.002:
+                time.sleep(sleep_time)
                 last_stat_time = now

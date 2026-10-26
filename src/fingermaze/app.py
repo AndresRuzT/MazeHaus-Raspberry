@@ -16,6 +16,7 @@ from fingermaze.input.mailbox import LatestValueMailbox
 from fingermaze.input.mapping import CoordinateMapper
 from fingermaze.input.mouse_input import MouseInputProvider
 from fingermaze.input.tracking.mediapipe_tracker import MediaPipeHandTracker
+from fingermaze.input.tracking.onnx_tracker import ONNXHandTracker
 from fingermaze.input.tracking.opencv_tracker import OpenCVHandTracker
 from fingermaze.input.vision_input import VisionInputProvider
 from fingermaze.input.vision_worker import RawDetectionSnapshot, VisionWorker
@@ -61,12 +62,31 @@ def create_input_provider(config: GameConfig) -> InputProvider:
             mirror=config.camera.mirror,
         )
 
-        # Select tracker backend based on CPU capabilities
-        if not cpu_supports_aes():
+        # Select tracker backend:
+        # 1. MediaPipe ONNX via OpenCV DNN (preferred: AI precision, immune to faces/necks/lighting)
+        palm_model = Path("models/onnx/palm_detection_mediapipe_2023feb.onnx")
+        pose_model = Path("models/onnx/handpose_estimation_mediapipe_2023feb.onnx")
+
+        if not palm_model.exists() or not pose_model.exists():
+            try:
+                from scripts.download_model import download_models
+
+                logger.info("Downloading MediaPipe ONNX tracking models...")
+                download_models()
+            except Exception as dl_err:
+                logger.warning(f"Could not auto-download ONNX models: {dl_err}")
+
+        if palm_model.exists() and pose_model.exists():
+            logger.info("Initializing MediaPipe ONNX Hand Tracker via OpenCV DNN...")
+            tracker: Any = ONNXHandTracker(
+                palm_model_path=str(palm_model),
+                pose_model_path=str(pose_model),
+            )
+        elif not cpu_supports_aes():
             logger.info(
                 "Cortex CPU lacks hardware AES extension (Raspberry Pi). Using native OpenCV Tracker."
             )
-            tracker: Any = OpenCVHandTracker()
+            tracker = OpenCVHandTracker()
         else:
             logger.info("Host CPU supports AES. Using MediaPipe Hand Landmarker.")
             tracker = MediaPipeHandTracker(

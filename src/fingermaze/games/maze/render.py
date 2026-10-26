@@ -82,6 +82,9 @@ class MazeRenderer:
 
         self.particles: list[Particle] = []
         self._last_spark_time = 0.0
+        self._cached_wall_surface: pygame.Surface | None = None
+        self._cached_maze_id: int | None = None
+        self._cached_maze_size: tuple[int, int] | None = None
 
     def spawn_sparks(
         self,
@@ -399,25 +402,42 @@ class MazeRenderer:
         ox: int = 0,
         oy: int = 0,
     ) -> None:
-        grid = maze_def.grid
-        th = int(layout.wall_thickness)
+        """Draw maze walls using cached pre-rendered surface for 60+ FPS performance."""
+        maze_id = id(maze_def)
+        surf_size = surface.get_size()
 
-        for c in range(grid.cols):
-            for r in range(grid.rows):
-                x1 = int(layout.origin_x + c * layout.cell_width + ox)
-                y1 = int(layout.origin_y + r * layout.cell_height + oy)
-                x2 = int(x1 + layout.cell_width)
-                y2 = int(y1 + layout.cell_height)
+        # Re-render only when maze or window changes
+        if (
+            self._cached_wall_surface is None
+            or self._cached_maze_id != maze_id
+            or self._cached_maze_size != surf_size
+        ):
+            wall_surf = pygame.Surface(surf_size, pygame.SRCALPHA)
+            grid = maze_def.grid
+            th = int(layout.wall_thickness)
 
-                walls = grid.get_walls(c, r)
-                if walls & Wall.NORTH:
-                    pygame.draw.line(surface, COLOR_WALL, (x1, y1), (x2, y1), width=th)
-                if walls & Wall.SOUTH:
-                    pygame.draw.line(surface, COLOR_WALL, (x1, y2), (x2, y2), width=th)
-                if walls & Wall.WEST:
-                    pygame.draw.line(surface, COLOR_WALL, (x1, y1), (x1, y2), width=th)
-                if walls & Wall.EAST:
-                    pygame.draw.line(surface, COLOR_WALL, (x2, y1), (x2, y2), width=th)
+            for c in range(grid.cols):
+                for r in range(grid.rows):
+                    x1 = int(layout.origin_x + c * layout.cell_width)
+                    y1 = int(layout.origin_y + r * layout.cell_height)
+                    x2 = int(x1 + layout.cell_width)
+                    y2 = int(y1 + layout.cell_height)
+
+                    walls = grid.get_walls(c, r)
+                    if walls & Wall.NORTH:
+                        pygame.draw.line(wall_surf, COLOR_WALL, (x1, y1), (x2, y1), width=th)
+                    if walls & Wall.SOUTH:
+                        pygame.draw.line(wall_surf, COLOR_WALL, (x1, y2), (x2, y2), width=th)
+                    if walls & Wall.WEST:
+                        pygame.draw.line(wall_surf, COLOR_WALL, (x1, y1), (x1, y2), width=th)
+                    if walls & Wall.EAST:
+                        pygame.draw.line(wall_surf, COLOR_WALL, (x2, y1), (x2, y2), width=th)
+
+            self._cached_wall_surface = wall_surf
+            self._cached_maze_id = maze_id
+            self._cached_maze_size = surf_size
+
+        surface.blit(self._cached_wall_surface, (ox, oy))
 
     def _draw_sidebar(
         self,
@@ -568,8 +588,11 @@ class MazeRenderer:
         pip_rect = pygame.Rect(x, y, w, h)
 
         if camera_preview is not None and isinstance(camera_preview, pygame.Surface):
-            scaled = pygame.transform.smoothscale(camera_preview, (w, h))
-            surface.blit(scaled, pip_rect)
+            if camera_preview.get_size() == (w, h):
+                surface.blit(camera_preview, pip_rect)
+            else:
+                scaled = pygame.transform.scale(camera_preview, (w, h))
+                surface.blit(scaled, pip_rect)
         else:
             pygame.draw.rect(surface, (25, 32, 46), pip_rect, border_radius=6)
             placeholder = self.small_font.render("Esperando Cámara...", True, COLOR_TEXT_MUTED)

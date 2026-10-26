@@ -12,7 +12,7 @@ class DisplayConfig(BaseModel):
     width: int = Field(default=1280, ge=640, le=3840)
     height: int = Field(default=720, ge=480, le=2160)
     fullscreen: bool = False
-    target_fps: int = Field(default=60, ge=30, le=120)
+    target_fps: int = Field(default=30, ge=15, le=120)
 
 
 class CameraConfig(BaseModel):

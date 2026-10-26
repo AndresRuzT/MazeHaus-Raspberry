@@ -52,12 +52,15 @@ def check_dependencies() -> bool:
 
 
 def check_model() -> bool:
-    print("[*] Checking Hand Landmarker model file...")
-    model_path = Path(__file__).resolve().parent.parent / "models" / "hand_landmarker.task"
-    if model_path.exists() and model_path.stat().st_size > 0:
-        print(f"    [PASS] Model found: {model_path} ({model_path.stat().st_size} bytes)")
+    print("[*] Checking MediaPipe ONNX model files...")
+    models_dir = Path(__file__).resolve().parent.parent / "models" / "onnx"
+    m1 = models_dir / "palm_detection_mediapipe_2023feb.onnx"
+    m2 = models_dir / "handpose_estimation_mediapipe_2023feb.onnx"
+    if m1.exists() and m2.exists() and m1.stat().st_size > 0 and m2.stat().st_size > 0:
+        print(f"    [PASS] Palm model found: {m1.name} ({m1.stat().st_size} bytes)")
+        print(f"    [PASS] Pose model found: {m2.name} ({m2.stat().st_size} bytes)")
         return True
-    print(f"    [FAIL] Model missing at {model_path}. Run 'python scripts/download_model.py'")
+    print(f"    [FAIL] Models missing in {models_dir}. Run 'python scripts/download_model.py'")
     return False
 
 
