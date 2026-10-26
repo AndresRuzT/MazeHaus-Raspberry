@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fingermaze"
+version = "0.1.0"
+description = "Computer-vision controlled maze game designed for Raspberry Pi"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = "MIT"
+authors = [
+    { name = "Andres & Team" }
+]
+dependencies = [
+    "pygame-ce>=2.4.0",
+    "pydantic>=2.6.0",
+    "numpy>=1.26.0",
+    "opencv-python-headless>=4.8.0",
+    "mediapipe>=0.10.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "hypothesis>=6.90.0",
+    "ruff>=0.3.0",
+    "mypy>=1.9.0",
+]
+
+[project.scripts]
+fingermaze = "fingermaze.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fingermaze"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pygame.*",
+    "cv2.*",
+    "mediapipe.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "hardware: tests that require physical camera or display",
+]
