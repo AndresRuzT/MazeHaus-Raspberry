@@ -1,4 +1,4 @@
-"""Visual rendering for the maze, walls, checkpoints, player cursor, and camera PiP."""
+"""Visual rendering for the maze, walls, checkpoints, player cursor, calibration, and PiP."""
 
 from __future__ import annotations
 
@@ -27,18 +27,107 @@ COLOR_TEXT = (240, 245, 250)
 
 
 class MazeRenderer:
-    """Renders maze grid, walls, checkpoints, player, HUD, and live camera feed."""
+    """Renders maze grid, walls, checkpoints, player, HUD, calibration, and live camera feed."""
 
     def __init__(self, font: pygame.font.Font | None = None) -> None:
         if font is None:
             pygame.font.init()
-            self.font = pygame.font.Font(None, 24)
-            self.large_font = pygame.font.Font(None, 40)
+            self.font = pygame.font.Font(None, 26)
+            self.large_font = pygame.font.Font(None, 44)
+            self.huge_font = pygame.font.Font(None, 72)
             self.small_font = pygame.font.Font(None, 20)
         else:
             self.font = font
             self.large_font = font
+            self.huge_font = font
             self.small_font = font
+
+    def draw_calibration(
+        self,
+        surface: pygame.Surface,
+        hand_pos: tuple[float, float] | None,
+        dwell_progress: float,
+        camera_preview: Any,
+        hand_detected: bool,
+    ) -> None:
+        """Render the center calibration screen."""
+        surface.fill(COLOR_BG)
+        w, h = surface.get_width(), surface.get_height()
+        cx, cy = w // 2, h // 2
+
+        # Title and instructions
+        title = self.large_font.render("CALIBRACIÓN DE POSICIÓN CÓMODA", True, COLOR_TEXT)
+        surface.blit(title, title.get_rect(center=(cx, 90)))
+
+        subtitle = self.font.render(
+            "Coloca tu dedo índice en el centro de tu campo de visión para fijar tu postura",
+            True,
+            (180, 195, 210),
+        )
+        surface.blit(subtitle, subtitle.get_rect(center=(cx, 130)))
+
+        # Target center circle
+        target_r = 55
+        pygame.draw.circle(surface, (40, 50, 65), (cx, cy), target_r)
+        pygame.draw.circle(surface, (100, 120, 150), (cx, cy), target_r, width=2)
+        # Crosshair lines
+        pygame.draw.line(
+            surface, (80, 100, 120), (cx - target_r - 15, cy), (cx + target_r + 15, cy), 2
+        )
+        pygame.draw.line(
+            surface, (80, 100, 120), (cx, cy - target_r - 15), (cx, cy + target_r + 15), 2
+        )
+
+        # Dwell progress ring
+        if dwell_progress > 0.0:
+            pct_angle = int(dwell_progress * 360)
+            arc_rect = pygame.Rect(cx - target_r, cy - target_r, target_r * 2, target_r * 2)
+            pygame.draw.arc(surface, COLOR_START, arc_rect, 0, math.radians(pct_angle), width=6)
+            prog_txt = self.font.render(f"{int(dwell_progress * 100)}%", True, COLOR_START)
+            surface.blit(prog_txt, prog_txt.get_rect(center=(cx, cy)))
+        else:
+            lbl = self.small_font.render("CENTRO", True, (160, 175, 190))
+            surface.blit(lbl, lbl.get_rect(center=(cx, cy)))
+
+        # Bottom tip
+        tip = self.small_font.render(
+            "A partir de este punto, tus movimientos arriba/abajo e izquierda/derecha serán suaves y naturales",
+            True,
+            (140, 155, 170),
+        )
+        surface.blit(tip, tip.get_rect(center=(cx, h - 60)))
+
+        # Hand pointer
+        if hand_pos is not None:
+            hx, hy = int(hand_pos[0]), int(hand_pos[1])
+            pygame.draw.circle(surface, COLOR_HAND_POINTER, (hx, hy), 16, width=2)
+            pygame.draw.circle(surface, (255, 255, 255), (hx, hy), 4)
+
+        # Camera PiP
+        self._draw_camera_pip(surface, camera_preview, hand_detected)
+
+    def draw_countdown(
+        self,
+        surface: pygame.Surface,
+        count_number: int,
+    ) -> None:
+        """Render stylish countdown before maze starts."""
+        w, h = surface.get_width(), surface.get_height()
+        cx, cy = w // 2, h // 2
+
+        text_str = str(count_number) if count_number > 0 else "¡YA!"
+        color = COLOR_START if count_number > 0 else COLOR_EXIT
+        surf = self.huge_font.render(text_str, True, color)
+        rect = surf.get_rect(center=(cx, cy))
+
+        # Soft background glow
+        bg_r = pygame.Rect(rect.x - 30, rect.y - 20, rect.width + 60, rect.height + 40)
+        overlay = pygame.Surface((bg_r.width, bg_r.height), pygame.SRCALPHA)
+        overlay.fill((10, 15, 20, 220))
+        surface.blit(overlay, bg_r.topleft)
+        pygame.draw.rect(surface, color, bg_r, width=3, border_radius=12)
+
+        surface.blit(surf, rect)
 
     def draw(
         self,
@@ -50,14 +139,13 @@ class MazeRenderer:
         camera_preview: Any = None,
         hand_detected: bool = False,
     ) -> None:
-        # 1. Clear background
         surface.fill(COLOR_BG)
 
-        # 2. Draw Start and Exit zones
+        # Start and Exit zones
         self._draw_cell_highlight(surface, layout, maze_def.start_cell, COLOR_START, "INICIO")
         self._draw_cell_highlight(surface, layout, maze_def.exit_cell, COLOR_EXIT, "META")
 
-        # 3. Draw Checkpoints
+        # Checkpoints
         for idx, cp_cell in enumerate(maze_def.checkpoints):
             if cp_cell == maze_def.start_cell or cp_cell == maze_def.exit_cell:
                 continue
@@ -65,21 +153,21 @@ class MazeRenderer:
                 COLOR_CHECKPOINT_PASSED if idx <= state.active_checkpoint_idx else COLOR_CHECKPOINT
             )
             cx, cy = layout.cell_to_pixel_center(*cp_cell)
-            pygame.draw.circle(surface, color, (int(cx), int(cy)), int(layout.cell_width * 0.25))
+            pygame.draw.circle(surface, color, (int(cx), int(cy)), int(layout.cell_width * 0.22))
 
-        # 4. Draw Maze Walls
+        # Maze Walls
         self._draw_walls(surface, maze_def, layout)
 
-        # 5. Draw Active Checkpoint pulsing target when waiting for touch
+        # Pulsing target when waiting for touch
         if state.status == GameStatus.WAITING_FOR_TOUCH:
             self._draw_pulsing_target(surface, layout, state.current_checkpoint_pos())
 
-        # 6. Draw Player Trail (path drawn by the player)
+        # Player Trail
         if len(state.trail) >= 2:
             int_trail = [(int(x), int(y)) for x, y in state.trail]
-            pygame.draw.lines(surface, COLOR_TRAIL, False, int_trail, width=4)
+            pygame.draw.lines(surface, COLOR_TRAIL, False, int_trail, width=5)
 
-        # 7. Draw Maze Runner Head (trace head)
+        # Maze Runner Head (trace head)
         px, py = int(state.current_pos[0]), int(state.current_pos[1])
         cursor_color = (
             COLOR_CURSOR_STUN if state.status == GameStatus.PENALTY_STUN else COLOR_CURSOR_NORMAL
@@ -89,22 +177,20 @@ class MazeRenderer:
             surface, (255, 255, 255), (px, py), max(2, int(layout.cursor_radius * 0.4))
         )
 
-        # 8. Draw Real-Time Hand Pointer (where the finger is pointing in 2D space)
+        # Real-Time Hand Pointer
         if hand_pos is not None:
             hx, hy = int(hand_pos[0]), int(hand_pos[1])
-            # Draw glowing targeting reticle
             pygame.draw.circle(
-                surface, COLOR_HAND_POINTER, (hx, hy), int(layout.cursor_radius * 1.4), width=2
+                surface, COLOR_HAND_POINTER, (hx, hy), int(layout.cursor_radius * 1.3), width=2
             )
             pygame.draw.circle(surface, (255, 255, 255), (hx, hy), 3)
-            # Draw line connecting hand to trace head if actively playing
             if state.status == GameStatus.PLAYING:
                 pygame.draw.line(surface, (*COLOR_HAND_POINTER, 150), (hx, hy), (px, py), width=2)
 
-        # 9. Draw HUD overlay
+        # HUD overlay
         self._draw_hud(surface, state, maze_def)
 
-        # 10. Draw Live Camera Preview (Picture-in-Picture)
+        # Camera PiP
         self._draw_camera_pip(surface, camera_preview, hand_detected)
 
     def _draw_pulsing_target(
@@ -137,24 +223,19 @@ class MazeRenderer:
         margin = 15
         pip_x = surface.get_width() - pip_w - margin
         pip_y = margin
-
         pip_rect = pygame.Rect(pip_x, pip_y, pip_w, pip_h)
 
         if camera_preview is not None and isinstance(camera_preview, pygame.Surface):
             surface.blit(camera_preview, pip_rect)
         else:
-            # Standby box
             pygame.draw.rect(surface, (30, 35, 45), pip_rect)
             placeholder = self.small_font.render("Sin señal de cámara", True, (140, 150, 160))
             surface.blit(placeholder, placeholder.get_rect(center=pip_rect.center))
 
-        # Border color based on hand detection
         border_color = (46, 204, 113) if hand_detected else (230, 126, 34)
         status_text = "MANO DETECTADA" if hand_detected else "BUSCANDO DEDO..."
-
         pygame.draw.rect(surface, border_color, pip_rect, width=2, border_radius=4)
 
-        # Status badge below preview
         badge_surf = self.small_font.render(status_text, True, border_color)
         bg_badge = pygame.Rect(pip_x, pip_y + pip_h + 4, pip_w, 20)
         pygame.draw.rect(surface, (15, 18, 24), bg_badge, border_radius=3)
@@ -214,7 +295,7 @@ class MazeRenderer:
         maze_def: MazeDefinition,
     ) -> None:
         time_str = f"Tiempo: {state.elapsed_time:.1f}s"
-        penalties_str = f"Penalizaciones: {state.total_penalties} (+{state.total_penalties * state.wall_penalty_s:.0f}s)"
+        penalties_str = f"Penalizaciones: {state.total_penalties} (+{state.total_penalties * state.wall_penalty_s:.1f}s)"
         score_str = f"Total: {state.total_score_time:.1f}s"
 
         surf_time = self.font.render(time_str, True, COLOR_TEXT)
@@ -237,7 +318,7 @@ class MazeRenderer:
         if state.status == GameStatus.WAITING_FOR_TOUCH:
             target_name = "INICIO" if state.active_checkpoint_idx == 0 else "CHECKPOINT"
             prompt = self.font.render(
-                f"Lleva tu dedo al {target_name} para comenzar a trazar",
+                f"Lleva tu dedo al {target_name} para continuar el trazado",
                 True,
                 COLOR_START,
             )
@@ -255,7 +336,11 @@ class MazeRenderer:
                 True,
                 COLOR_EXIT,
             )
-            sub = self.font.render("Presiona [R] para jugar un nuevo laberinto", True, COLOR_TEXT)
+            sub = self.font.render(
+                "Presiona [R] para jugar un nuevo laberinto (o [C] para recalibrar)",
+                True,
+                COLOR_TEXT,
+            )
             b_rect = banner.get_rect(
                 center=(surface.get_width() // 2, surface.get_height() // 2 - 20)
             )

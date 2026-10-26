@@ -14,6 +14,9 @@ class MouseInputProvider(InputProvider):
     def __init__(self, player_id: PlayerId = PlayerId.PLAYER_1) -> None:
         self.player_id = player_id
 
+    def calibrate_center(self, norm_x: float, norm_y: float) -> None:
+        pass
+
     def poll(self, now: float) -> InputSnapshot:
         mx, my = pygame.mouse.get_pos()
         pointer = Pointer(
@@ -22,6 +25,7 @@ class MouseInputProvider(InputProvider):
             state=TrackingState.TRACKED,
             timestamp=now,
             confidence=1.0,
+            raw_norm=(0.5, 0.5),
         )
         return InputSnapshot(
             timestamp=now,

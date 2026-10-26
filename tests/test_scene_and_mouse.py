@@ -4,7 +4,7 @@ import pygame
 
 from fingermaze.config.settings import GameConfig
 from fingermaze.core.types import InputSnapshot, PlayerId, Point2D, Pointer, TrackingState
-from fingermaze.games.maze.scene import MazeScene
+from fingermaze.games.maze.scene import MazeScene, ScenePhase
 from fingermaze.input.mouse_input import MouseInputProvider
 
 
@@ -12,6 +12,7 @@ def test_mouse_input_provider() -> None:
     pygame.init()
     pygame.display.set_mode((100, 100))
     provider = MouseInputProvider()
+    provider.calibrate_center(0.5, 0.5)
     snapshot = provider.poll(100.0)
     assert snapshot.timestamp == 100.0
     ptr = snapshot.get_pointer(PlayerId.PLAYER_1)
@@ -20,7 +21,7 @@ def test_mouse_input_provider() -> None:
     provider.close()
 
 
-def test_maze_scene_lifecycle_and_draw() -> None:
+def test_maze_scene_calibration_flow() -> None:
     pygame.init()
     surface = pygame.Surface((800, 600))
     config = GameConfig()
@@ -30,31 +31,50 @@ def test_maze_scene_lifecycle_and_draw() -> None:
     config.maze.rows = 4
 
     scene = MazeScene(config=config)
+    assert scene.phase == ScenePhase.CALIBRATING
 
-    # Initial draw
+    # Draw calibration screen
     scene.draw(surface)
 
-    # Update with pointer tracking
-    start_pos = scene.player_state.current_pos
-    pointer = Pointer(
+    # Move finger into center circle (x=400, y=300) to dwell
+    center_ptr = Pointer(
         player_id=PlayerId.PLAYER_1,
-        position=Point2D(x=start_pos[0] + 2.0, y=start_pos[1] + 2.0),
+        position=Point2D(x=400.0, y=300.0),
         state=TrackingState.TRACKED,
+        raw_norm=(0.5, 0.5),
     )
-    inputs = InputSnapshot(timestamp=1.0, pointers={PlayerId.PLAYER_1: pointer})
+    inputs = InputSnapshot(timestamp=1.0, pointers={PlayerId.PLAYER_1: center_ptr})
 
-    scene.update(0.016, inputs)
+    # Dwell tick
+    scene.update(0.5, inputs)
+    assert scene.phase == ScenePhase.CALIBRATING
+    # Finish dwell -> triggers countdown
+    scene.update(0.4, inputs)
+    assert scene.phase == ScenePhase.COUNTDOWN
+
+    # Draw countdown
     scene.draw(surface)
 
-    # Test pause toggle
-    key_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_p)
-    scene.handle_event(key_event)
-    assert scene.is_paused is True
-    scene.draw(surface)
+    # Countdown tick to completion
+    for _ in range(5):
+        scene.update(0.4, inputs)
 
-    # Test reset toggle
+    assert scene.phase == ScenePhase.PLAYING
+
+    # Test reset toggle (R)
     r_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r)
     scene.handle_event(r_event)
+    assert scene.phase == ScenePhase.PLAYING
+
+    # Test calibrate shortcut (C)
+    c_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c)
+    scene.handle_event(c_event)
+    assert scene.phase == ScenePhase.CALIBRATING
+
+    # Test pause toggle
+    p_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_p)
+    scene.handle_event(p_event)
+    assert scene.is_paused is True
 
     # Test quit toggle
     esc_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)

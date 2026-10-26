@@ -23,8 +23,8 @@ filter_min_cutoff = 1.0
 filter_beta = 0.05
 
 [maze]
-cols = 16
-rows = 10
-wall_thickness = 8
-cursor_radius = 12
-wall_penalty_seconds = 3.0
+cols = 10
+rows = 7
+wall_thickness = 6
+cursor_radius = 14
+wall_penalty_seconds = 2.5

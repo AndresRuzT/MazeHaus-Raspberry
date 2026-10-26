@@ -22,7 +22,7 @@ def test_player_game_state_lifecycle() -> None:
     assert state.total_penalties == 0
 
     # Moving to start position activates tracing (PLAYING)
-    start_pos = layout.cell_to_pixel_center(0, 0)
+    start_pos = layout.cell_to_pixel_center(*maze_def.start_cell)
     state.update_position(start_pos, collides=False)
     assert state.status == GameStatus.PLAYING
 

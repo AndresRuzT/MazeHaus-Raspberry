@@ -34,11 +34,11 @@ class TrackingConfig(BaseModel):
 
 
 class MazeDifficultyConfig(BaseModel):
-    cols: int = Field(default=16, ge=4, le=64)
-    rows: int = Field(default=10, ge=4, le=48)
-    wall_thickness: int = Field(default=8, ge=2, le=30)
-    cursor_radius: int = Field(default=12, ge=4, le=30)
-    wall_penalty_seconds: float = Field(default=3.0, ge=0.0, le=15.0)
+    cols: int = Field(default=10, ge=4, le=64)
+    rows: int = Field(default=7, ge=4, le=48)
+    wall_thickness: int = Field(default=6, ge=2, le=30)
+    cursor_radius: int = Field(default=14, ge=4, le=30)
+    wall_penalty_seconds: float = Field(default=2.5, ge=0.0, le=15.0)
 
 
 class GameConfig(BaseModel):

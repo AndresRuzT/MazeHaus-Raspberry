@@ -56,6 +56,7 @@ class Pointer:
     state: TrackingState = TrackingState.TRACKED
     timestamp: float = 0.0
     confidence: float = 1.0
+    raw_norm: tuple[float, float] = (0.5, 0.5)
 
 
 @dataclass(frozen=True)

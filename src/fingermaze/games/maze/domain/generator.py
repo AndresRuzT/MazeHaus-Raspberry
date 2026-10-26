@@ -19,7 +19,13 @@ class MazeDefinition:
     seed: int
 
 
-def generate_maze(cols: int, rows: int, seed: int | None = None) -> MazeDefinition:
+def generate_maze(
+    cols: int,
+    rows: int,
+    seed: int | None = None,
+    start_cell: tuple[int, int] | None = None,
+    exit_cell: tuple[int, int] | None = None,
+) -> MazeDefinition:
     """Generate a deterministic perfect maze (fully connected, no loops)."""
     if seed is None:
         seed = random.randint(0, 2_147_483_647)
@@ -27,13 +33,17 @@ def generate_maze(cols: int, rows: int, seed: int | None = None) -> MazeDefiniti
     rng = random.Random(seed)
     grid = MazeGrid.create_empty(cols, rows, Wall.ALL)
 
-    start_cell = (0, 0)
-    exit_cell = (cols - 1, rows - 1)
+    if start_cell is None:
+        start_cell = (cols // 2, rows // 2)
+
+    if exit_cell is None:
+        # Farthest corner from start
+        exit_cell = (cols - 1, rows - 1) if start_cell != (cols - 1, rows - 1) else (0, 0)
 
     # Iterative Depth-First Search / Recursive Backtracker with explicit stack
     visited = [False] * (cols * rows)
     stack: list[tuple[int, int]] = [start_cell]
-    visited[grid.index(0, 0)] = True
+    visited[grid.index(*start_cell)] = True
 
     directions = [Wall.NORTH, Wall.EAST, Wall.SOUTH, Wall.WEST]
 
@@ -49,13 +59,9 @@ def generate_maze(cols: int, rows: int, seed: int | None = None) -> MazeDefiniti
                 unvisited_neighbours.append((ncol, nrow, wall))
 
         if unvisited_neighbours:
-            # Pick a random unvisited neighbor
             ncol, nrow, wall = rng.choice(unvisited_neighbours)
-
-            # Knock down the wall between current and neighbor
             grid.remove_wall(col, row, wall)
             grid.remove_wall(ncol, nrow, OPPOSITE_WALL[wall])
-
             visited[grid.index(ncol, nrow)] = True
             stack.append((ncol, nrow))
         else:
@@ -64,8 +70,8 @@ def generate_maze(cols: int, rows: int, seed: int | None = None) -> MazeDefiniti
     # Solve the maze using BFS to find the canonical solution path
     solution_path = _find_shortest_path(grid, start_cell, exit_cell)
 
-    # Place checkpoints along the solution path (every ~4-6 cells)
-    checkpoints = _compute_checkpoints(solution_path)
+    # Place checkpoints along the solution path (every ~4 cells)
+    checkpoints = _compute_checkpoints(solution_path, interval=4)
 
     return MazeDefinition(
         grid=grid,
@@ -109,7 +115,7 @@ def _find_shortest_path(
 
 
 def _compute_checkpoints(
-    solution_path: list[tuple[int, int]], interval: int = 5
+    solution_path: list[tuple[int, int]], interval: int = 4
 ) -> list[tuple[int, int]]:
     """Select checkpoints evenly along the solution path."""
     if not solution_path:

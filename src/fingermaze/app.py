@@ -79,7 +79,7 @@ def run_app(config: GameConfig | None = None) -> None:
     logger.info("Starting FingerMaze application...")
 
     input_provider = create_input_provider(config)
-    scene = MazeScene(config=config)
+    scene = MazeScene(config=config, input_provider=input_provider)
     loop = GameLoop(config=config, input_provider=input_provider, initial_scene=scene)
 
     loop.run()

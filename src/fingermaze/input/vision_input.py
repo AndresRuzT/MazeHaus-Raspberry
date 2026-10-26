@@ -37,6 +37,10 @@ class VisionInputProvider(InputProvider):
         self.last_pointers: dict[PlayerId, Pointer] = {}
         self.last_seen_time: dict[PlayerId, float] = {}
 
+    def calibrate_center(self, norm_x: float, norm_y: float) -> None:
+        """Calibrate the natural center point of the hand in camera space."""
+        self.mapper.calibrate_center(norm_x, norm_y)
+
     def poll(self, now: float) -> InputSnapshot:
         snapshot, _ = self.mailbox.read()
         current_pointers: dict[PlayerId, Pointer] = {}
@@ -62,6 +66,7 @@ class VisionInputProvider(InputProvider):
                     state=TrackingState.TRACKED,
                     timestamp=now,
                     confidence=sample.confidence,
+                    raw_norm=(sample.norm_x, sample.norm_y),
                 )
                 current_pointers[sample.player_id] = pointer
                 self.last_pointers[sample.player_id] = pointer
