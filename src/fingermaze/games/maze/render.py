@@ -120,77 +120,76 @@ class MazeRenderer:
         dwell_progress: float,
         camera_preview: Any,
         hand_detected: bool,
+        target_center: tuple[float, float] | None = None,
     ) -> None:
-        """Render stylish, welcoming calibration screen."""
+        """Render stylish, welcoming calibration screen aligned with arena center."""
         surface.fill(COLOR_BG)
         w, h = surface.get_width(), surface.get_height()
-        cx, cy = w // 2, h // 2
 
-        # Card container
-        card_w, card_h = 720, 480
-        card_rect = pygame.Rect((w - card_w) // 2, (h - card_h) // 2, card_w, card_h)
-        pygame.draw.rect(surface, COLOR_PANEL_BG, card_rect, border_radius=16)
-        pygame.draw.rect(surface, COLOR_PANEL_BORDER, card_rect, width=2, border_radius=16)
+        if target_center is not None:
+            cx, cy = int(target_center[0]), int(target_center[1])
+        else:
+            cx, cy = w // 2, h // 2
 
-        # Header
+        # Header banner
         title = self.large_font.render("CALIBRACIÓN DE POSICIÓN CÓMODA", True, COLOR_START)
-        surface.blit(title, title.get_rect(center=(cx, card_rect.y + 50)))
+        surface.blit(title, (40, 30))
 
         subtitle = self.font.render(
-            "Coloca tu dedo índice en el centro para calibrar tu postura de juego",
+            "Coloca tu dedo índice en el círculo central (o presiona [ESPACIO] para jugar ya)",
             True,
             COLOR_TEXT_MUTED,
         )
-        surface.blit(subtitle, subtitle.get_rect(center=(cx, card_rect.y + 90)))
+        surface.blit(subtitle, (40, 75))
 
         # Target center concentric rings
-        target_r = 60
+        target_r = 65
         pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 5.0)
-        pygame.draw.circle(surface, (25, 33, 48), (cx, cy + 20), target_r)
-        pygame.draw.circle(surface, (60, 80, 110), (cx, cy + 20), target_r, width=2)
+        pygame.draw.circle(surface, (25, 33, 48), (cx, cy), target_r)
+        pygame.draw.circle(surface, (60, 80, 110), (cx, cy), target_r, width=2)
         pygame.draw.circle(
             surface,
-            (*COLOR_START, int(60 + pulse * 60)),
-            (cx, cy + 20),
-            int(target_r + pulse * 8),
+            (*COLOR_START, int(70 + pulse * 70)),
+            (cx, cy),
+            int(target_r + pulse * 10),
             width=2,
         )
 
         # Crosshairs
         pygame.draw.line(
-            surface, (60, 80, 110), (cx - target_r - 15, cy + 20), (cx + target_r + 15, cy + 20), 2
+            surface, (60, 80, 110), (cx - target_r - 20, cy), (cx + target_r + 20, cy), 2
         )
         pygame.draw.line(
-            surface, (60, 80, 110), (cx, cy + 20 - target_r - 15), (cx, cy + 20 + target_r + 15), 2
+            surface, (60, 80, 110), (cx, cy - target_r - 20), (cx, cy + target_r + 20), 2
         )
 
         # Progress Arc
         if dwell_progress > 0.0:
-            arc_rect = pygame.Rect(cx - target_r, cy + 20 - target_r, target_r * 2, target_r * 2)
+            arc_rect = pygame.Rect(cx - target_r, cy - target_r, target_r * 2, target_r * 2)
             pct_angle = dwell_progress * 360
-            pygame.draw.arc(surface, COLOR_START, arc_rect, 0, math.radians(pct_angle), width=6)
+            pygame.draw.arc(surface, COLOR_START, arc_rect, 0, math.radians(pct_angle), width=7)
             prog_txt = self.digital_font.render(f"{int(dwell_progress * 100)}%", True, COLOR_START)
-            surface.blit(prog_txt, prog_txt.get_rect(center=(cx, cy + 20)))
+            surface.blit(prog_txt, prog_txt.get_rect(center=(cx, cy)))
         else:
             lbl = self.small_font.render("CENTRO", True, COLOR_TEXT_MUTED)
-            surface.blit(lbl, lbl.get_rect(center=(cx, cy + 20)))
+            surface.blit(lbl, lbl.get_rect(center=(cx, cy)))
 
-        # Explanatory tip
+        # Explanatory tip at bottom
         tip = self.small_font.render(
-            "Moverás el cursor cómodamente con pequeños movimientos desde este punto de partida",
+            "Mueve tu dedo hacia el círculo o presiona la barra [ESPACIO] para saltar la calibración",
             True,
-            COLOR_TEXT_MUTED,
+            COLOR_TEXT_PRIMARY,
         )
-        surface.blit(tip, tip.get_rect(center=(cx, card_rect.bottom - 40)))
+        surface.blit(tip, (40, h - 45))
 
-        # Real-time Hand Pointer
+        # Real-time Hand Pointer (gold reticle)
         if hand_pos is not None:
             hx, hy = int(hand_pos[0]), int(hand_pos[1])
-            pygame.draw.circle(surface, COLOR_HAND_POINTER, (hx, hy), 18, width=2)
+            pygame.draw.circle(surface, COLOR_HAND_POINTER, (hx, hy), 20, width=2)
             pygame.draw.circle(surface, (255, 255, 255), (hx, hy), 4)
 
         # PiP preview in top right
-        self._draw_camera_pip(surface, camera_preview, hand_detected, x=w - 230, y=20, w=210, h=158)
+        self._draw_camera_pip(surface, camera_preview, hand_detected, x=w - 240, y=20, w=220, h=165)
 
     def draw_countdown(self, surface: pygame.Surface, count_number: int) -> None:
         """Countdown badge overlay before maze begins."""

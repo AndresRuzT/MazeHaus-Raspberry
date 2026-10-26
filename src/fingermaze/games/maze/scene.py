@@ -1,4 +1,4 @@
-"""Single-player maze gameplay scene with dedicated sidebar and particle effects."""
+"""Single-player maze gameplay scene with aligned center calibration and shortcuts."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class MazeScene(Scene):
         # Calibration & Countdown states
         self.phase = ScenePhase.CALIBRATING
         self.dwell_timer: float = 0.0
-        self.dwell_required: float = 0.8
+        self.dwell_required: float = 0.7
         self.countdown_val: int = 3
         self.countdown_timer: float = 0.0
         self.last_checkpoint_seen = 0
@@ -59,7 +59,6 @@ class MazeScene(Scene):
         cols = self.config.maze.cols
         rows = self.config.maze.rows
 
-        # Dedicated arena rectangle on the left
         margin_x = 20.0
         margin_y = 20.0
         available_w = float(self.sidebar_x - margin_x - 14.0)
@@ -77,7 +76,6 @@ class MazeScene(Scene):
             cursor_radius=float(self.config.maze.cursor_radius),
         )
 
-        # Generate maze starting in the center cell
         start_cell = (cols // 2, rows // 2)
         self.maze_def: MazeDefinition = generate_maze(cols=cols, rows=rows, start_cell=start_cell)
         self.collision_detector = MazeCollisionDetector(self.maze_def.grid, self.layout)
@@ -87,6 +85,12 @@ class MazeScene(Scene):
             wall_penalty_s=self.config.maze.wall_penalty_seconds,
         )
         self.last_checkpoint_seen = 0
+
+    def get_arena_center(self) -> tuple[float, float]:
+        """Exact center coordinates of the playable maze arena."""
+        cx = self.layout.origin_x + (self.maze_def.grid.cols * self.layout.cell_width) / 2.0
+        cy = self.layout.origin_y + (self.maze_def.grid.rows * self.layout.cell_height) / 2.0
+        return (cx, cy)
 
     def handle_event(self, event: pygame.event.Event) -> None:
         if event.type == pygame.QUIT:
@@ -102,6 +106,12 @@ class MazeScene(Scene):
             elif event.key == pygame.K_c:
                 self.phase = ScenePhase.CALIBRATING
                 self.dwell_timer = 0.0
+            elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                # Quick skip calibration directly to gameplay
+                if self.phase == ScenePhase.CALIBRATING:
+                    self.phase = ScenePhase.PLAYING
+                    start_pos = self.player_state.current_checkpoint_pos()
+                    self.player_state.update_position(start_pos, collides=False)
             elif event.key == pygame.K_p:
                 self.is_paused = not self.is_paused
 
@@ -128,11 +138,11 @@ class MazeScene(Scene):
 
         # 1. Calibration phase
         if self.phase == ScenePhase.CALIBRATING:
-            screen_cx = self.config.display.width // 2
-            screen_cy = self.config.display.height // 2
-            dist_to_center = math.hypot(target_pos[0] - screen_cx, target_pos[1] - screen_cy)
+            arena_cx, arena_cy = self.get_arena_center()
+            dist_to_center = math.hypot(target_pos[0] - arena_cx, target_pos[1] - arena_cy)
 
-            if dist_to_center <= 60.0:
+            # Generous target tolerance
+            if dist_to_center <= 85.0:
                 self.dwell_timer += dt
                 if self.dwell_timer >= self.dwell_required:
                     if self.input_provider and hasattr(self.input_provider, "calibrate_center"):
@@ -141,7 +151,7 @@ class MazeScene(Scene):
                     self.countdown_val = 3
                     self.countdown_timer = 0.0
             else:
-                self.dwell_timer = max(0.0, self.dwell_timer - dt * 2.0)
+                self.dwell_timer = max(0.0, self.dwell_timer - dt * 1.5)
             return
 
         # 2. Countdown phase
@@ -160,7 +170,6 @@ class MazeScene(Scene):
         prev_pos = self.player_state.current_pos
         has_collision = self.collision_detector.check_wall_collision(prev_pos, target_pos)
 
-        # Trigger spark effects on events
         if has_collision and self.player_state.status == GameStatus.PLAYING:
             self.renderer.spawn_sparks(target_pos[0], target_pos[1], (255, 65, 65), count=16)
 
@@ -168,13 +177,11 @@ class MazeScene(Scene):
         self.player_state.update_position(target_pos, collides=has_collision)
         self.player_state.tick_time(dt)
 
-        # Reached checkpoint particle celebration
         if self.player_state.active_checkpoint_idx > self.last_checkpoint_seen:
             self.last_checkpoint_seen = self.player_state.active_checkpoint_idx
             cp_x, cp_y = self.player_state.current_checkpoint_pos()
             self.renderer.spawn_sparks(cp_x, cp_y, (0, 230, 140), count=18)
 
-        # Victory celebration
         if old_status != GameStatus.FINISHED and self.player_state.status == GameStatus.FINISHED:
             ex_x, ex_y = self.layout.cell_to_pixel_center(*self.maze_def.exit_cell)
             self.renderer.spawn_sparks(ex_x, ex_y, (255, 205, 30), count=40, speed=180.0)
@@ -188,10 +195,10 @@ class MazeScene(Scene):
                 dwell_progress=progress,
                 camera_preview=self.camera_preview,
                 hand_detected=self.hand_detected,
+                target_center=self.get_arena_center(),
             )
             return
 
-        # Draw base maze + dedicated sidebar
         self.renderer.draw(
             surface=surface,
             maze_def=self.maze_def,

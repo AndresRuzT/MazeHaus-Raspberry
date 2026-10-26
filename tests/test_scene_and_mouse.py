@@ -36,10 +36,11 @@ def test_maze_scene_calibration_flow() -> None:
     # Draw calibration screen
     scene.draw(surface)
 
-    # Move finger into center circle (x=400, y=300) to dwell
+    # Move finger into arena center circle to dwell
+    arena_cx, arena_cy = scene.get_arena_center()
     center_ptr = Pointer(
         player_id=PlayerId.PLAYER_1,
-        position=Point2D(x=400.0, y=300.0),
+        position=Point2D(x=arena_cx, y=arena_cy),
         state=TrackingState.TRACKED,
         raw_norm=(0.5, 0.5),
     )
