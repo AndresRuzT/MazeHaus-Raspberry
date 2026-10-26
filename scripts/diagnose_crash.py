@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 
 def test_step(name: str, fn) -> None:
     print(f"[*] Testing {name}...", end=" ", flush=True)
