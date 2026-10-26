@@ -6,6 +6,10 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any
+
+import cv2
+import pygame
 
 from fingermaze.core.ports import CameraSource
 from fingermaze.core.types import PlayerId
@@ -29,6 +33,7 @@ class RawDetectionSnapshot:
     timestamp: float
     samples: list[RawPointerSample]
     has_hand: bool
+    preview_surface: Any = None
 
 
 class VisionWorker:
@@ -109,10 +114,27 @@ class VisionWorker:
                         )
                     )
 
+            # Generate downscaled preview surface with tracking landmarks
+            preview_surf = None
+            try:
+                pv_w, pv_h = 200, 150
+                small = cv2.resize(frame, (pv_w, pv_h))
+                for s in samples:
+                    fx = max(0, min(pv_w - 1, int(s.norm_x * pv_w)))
+                    fy = max(0, min(pv_h - 1, int(s.norm_y * pv_h)))
+                    cv2.circle(small, (fx, fy), 5, (0, 255, 0), -1)
+                    cv2.circle(small, (fx, fy), 8, (255, 255, 255), 1)
+
+                small_rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                preview_surf = pygame.image.frombuffer(small_rgb.tobytes(), (pv_w, pv_h), "RGB")
+            except Exception as exc:
+                logger.debug(f"Preview creation error: {exc}")
+
             snapshot = RawDetectionSnapshot(
                 timestamp=now,
                 samples=samples,
                 has_hand=bool(samples),
+                preview_surface=preview_surf,
             )
             self.mailbox.publish(snapshot)
 

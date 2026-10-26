@@ -17,12 +17,16 @@ def test_player_game_state_lifecycle() -> None:
     )
     state = PlayerGameState(maze_def=maze_def, layout=layout, wall_penalty_s=2.0)
 
-    # Initial state
-    assert state.status == GameStatus.NOT_STARTED
+    # Initial state is WAITING_FOR_TOUCH
+    assert state.status == GameStatus.WAITING_FOR_TOUCH
     assert state.total_penalties == 0
 
-    # Moving validly
+    # Moving to start position activates tracing (PLAYING)
     start_pos = layout.cell_to_pixel_center(0, 0)
+    state.update_position(start_pos, collides=False)
+    assert state.status == GameStatus.PLAYING
+
+    # Moving validly
     state.update_position((start_pos[0] + 5, start_pos[1] + 5), collides=False)
     assert state.status == GameStatus.PLAYING
 
@@ -36,8 +40,13 @@ def test_player_game_state_lifecycle() -> None:
     assert state.status == GameStatus.PENALTY_STUN
     assert state.total_score_time == 1.5 + (1 * 2.0)
 
-    # Stun tick recovery
+    # Stun tick recovery transitions to WAITING_FOR_TOUCH
     state.tick_time(0.5)
+    assert state.status == GameStatus.WAITING_FOR_TOUCH
+
+    # Touching checkpoint resumes PLAYING
+    cp_pos = state.current_checkpoint_pos()
+    state.update_position(cp_pos, collides=False)
     assert state.status == GameStatus.PLAYING
 
     # Reaching exit

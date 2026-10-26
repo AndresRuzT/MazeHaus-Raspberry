@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pygame
 
 from fingermaze.config.settings import GameConfig
@@ -22,6 +24,9 @@ class MazeScene(Scene):
         self.should_quit = False
         self.is_paused = False
         self.hand_lost = False
+        self.hand_detected = False
+        self.latest_hand_pos: tuple[float, float] | None = None
+        self.camera_preview: Any = None
 
         self._reset_game()
 
@@ -30,8 +35,9 @@ class MazeScene(Scene):
         rows = self.config.maze.rows
 
         # Calculate maze dimensions fitting comfortably on screen with margins
-        margin_x = 80.0
-        margin_y = 70.0
+        margin_x = 60.0
+        margin_y = 80.0
+        # Leave room on right side for Camera PiP if needed
         available_w = self.config.display.width - 2 * margin_x
         available_h = self.config.display.height - margin_y - 40.0
 
@@ -67,37 +73,46 @@ class MazeScene(Scene):
                 self.is_paused = not self.is_paused
 
     def update(self, dt: float, inputs: InputSnapshot) -> None:
+        self.camera_preview = inputs.camera_preview
+
         if self.is_paused:
             return
 
         ptr = inputs.get_pointer(PlayerId.PLAYER_1)
         if ptr is None or ptr.state == TrackingState.LOST:
             self.hand_lost = True
+            self.hand_detected = False
+            self.latest_hand_pos = None
+            if self.player_state.status == GameStatus.PLAYING:
+                self.player_state.status = GameStatus.WAITING_FOR_TOUCH
             return
 
         self.hand_lost = False
+        self.hand_detected = True
         target_pos = ptr.position.as_tuple()
-        prev_pos = self.player_state.current_pos
+        self.latest_hand_pos = target_pos
 
-        # Check collision with walls along the movement trajectory
+        # Check collision with walls along movement from last valid point to target
+        prev_pos = self.player_state.current_pos
         has_collision = self.collision_detector.check_wall_collision(prev_pos, target_pos)
 
-        # Update player position and timers
+        # Update player state
         self.player_state.update_position(target_pos, collides=has_collision)
         self.player_state.tick_time(dt)
 
     def draw(self, surface: pygame.Surface) -> None:
-        self.renderer.draw(surface, self.maze_def, self.layout, self.player_state)
+        self.renderer.draw(
+            surface=surface,
+            maze_def=self.maze_def,
+            layout=self.layout,
+            state=self.player_state,
+            hand_pos=self.latest_hand_pos,
+            camera_preview=self.camera_preview,
+            hand_detected=self.hand_detected,
+        )
 
-        # Lost tracking notification
-        if self.hand_lost and self.player_state.status != GameStatus.FINISHED:
-            self._draw_overlay_message(
-                surface,
-                "MANO FUERA DE CAMPO",
-                "Coloca tu dedo índice frente a la cámara para reanudar el juego",
-                (230, 126, 34),
-            )
-        elif self.is_paused:
+        # Show warning overlay only when paused
+        if self.is_paused:
             self._draw_overlay_message(
                 surface,
                 "JUEGO EN PAUSA",
@@ -113,7 +128,7 @@ class MazeScene(Scene):
         border_color: tuple[int, int, int],
     ) -> None:
         w, h = surface.get_width(), surface.get_height()
-        box_w, box_h = 600, 120
+        box_w, box_h = 500, 110
         rect = pygame.Rect((w - box_w) // 2, (h - box_h) // 2, box_w, box_h)
 
         overlay = pygame.Surface((box_w, box_h), pygame.SRCALPHA)

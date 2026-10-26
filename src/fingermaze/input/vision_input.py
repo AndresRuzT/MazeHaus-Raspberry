@@ -40,6 +40,7 @@ class VisionInputProvider(InputProvider):
     def poll(self, now: float) -> InputSnapshot:
         snapshot, _ = self.mailbox.read()
         current_pointers: dict[PlayerId, Pointer] = {}
+        preview_surf = snapshot.preview_surface if snapshot is not None else None
 
         if snapshot is not None and snapshot.has_hand:
             for sample in snapshot.samples:
@@ -81,7 +82,7 @@ class VisionInputProvider(InputProvider):
                 else:
                     current_pointers[pid] = last_ptr
 
-        return InputSnapshot(timestamp=now, pointers=current_pointers)
+        return InputSnapshot(timestamp=now, pointers=current_pointers, camera_preview=preview_surf)
 
     def close(self) -> None:
         self.worker.stop()
