@@ -1,4 +1,4 @@
-"""One Euro Filter for responsive, jitter-free cursor tracking.
+"""One Euro Filter with noise deadband for jitter-free cursor tracking.
 
 Reference: Casiez et al., '1 € Filter: A Simple Speed-based Low-pass Filter
 for Noisy Input in Human-Computer Interaction', CHI 2012.
@@ -58,16 +58,13 @@ class OneEuroFilter:
         dt = timestamp - self.last_time
         self.last_time = timestamp
 
-        # Guard against zero or negative delta time
         if dt <= 1e-6:
             dt = 1e-6
 
-        # Estimate derivative of the signal (speed)
         prev_x = self.x_filter.y if self.x_filter.y is not None else x
         dx = (x - prev_x) / dt
         edx = self.dx_filter.filter(dx, alpha=self._alpha(self.d_cutoff, dt))
 
-        # Dynamic cutoff frequency based on speed
         cutoff = self.min_cutoff + self.beta * abs(edx)
         return self.x_filter.filter(x, alpha=self._alpha(cutoff, dt))
 
@@ -78,22 +75,42 @@ class OneEuroFilter:
 
 
 class OneEuroFilter2D:
-    """2D wrapper for filtering (x, y) coordinates."""
+    """2D adaptive filter with noise deadband to eliminate stationary tremor."""
 
     def __init__(
         self,
-        min_cutoff: float = 1.0,
-        beta: float = 0.05,
+        min_cutoff: float = 0.8,
+        beta: float = 0.08,
         d_cutoff: float = 1.0,
+        deadband: float = 4.5,
     ) -> None:
         self.filter_x = OneEuroFilter(min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff)
         self.filter_y = OneEuroFilter(min_cutoff=min_cutoff, beta=beta, d_cutoff=d_cutoff)
+        self.deadband = deadband
+        self.last_stable_x: float | None = None
+        self.last_stable_y: float | None = None
 
     def filter(self, x: float, y: float, timestamp: float) -> tuple[float, float]:
+        # 1. Apply One Euro adaptive low-pass filter
         fx = self.filter_x.filter(x, timestamp)
         fy = self.filter_y.filter(y, timestamp)
+
+        # 2. Apply deadband: if motion is tiny involuntary tremor, freeze at last stable position
+        if self.last_stable_x is None or self.last_stable_y is None:
+            self.last_stable_x = fx
+            self.last_stable_y = fy
+            return (fx, fy)
+
+        dist = math.hypot(fx - self.last_stable_x, fy - self.last_stable_y)
+        if dist < self.deadband:
+            return (self.last_stable_x, self.last_stable_y)
+
+        self.last_stable_x = fx
+        self.last_stable_y = fy
         return (fx, fy)
 
     def reset(self) -> None:
         self.filter_x.reset()
         self.filter_y.reset()
+        self.last_stable_x = None
+        self.last_stable_y = None

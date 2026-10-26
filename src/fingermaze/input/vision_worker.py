@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import cv2
+import numpy as np
 import pygame
 
 from fingermaze.core.ports import CameraSource
@@ -33,6 +34,7 @@ class RawDetectionSnapshot:
     samples: list[RawPointerSample]
     has_hand: bool
     preview_surface: Any = None
+    status_label: str = "BUSCANDO DEDO"
 
 
 class VisionWorker:
@@ -113,16 +115,32 @@ class VisionWorker:
                         )
                     )
 
-            # Generate downscaled preview surface with tracking landmarks
+            # Generate downscaled preview surface with tracking landmarks & contour
             preview_surf = None
+            status_label = getattr(
+                self.tracker, "status_message", "BUSCANDO DEDO" if not samples else "DEDO DETECTADO"
+            )
+            is_pointing = getattr(self.tracker, "is_pointing", True)
             try:
                 pv_w, pv_h = 200, 150
                 small = cv2.resize(frame, (pv_w, pv_h))
-                for s in samples:
-                    fx = max(0, min(pv_w - 1, int(s.norm_x * pv_w)))
-                    fy = max(0, min(pv_h - 1, int(s.norm_y * pv_h)))
-                    cv2.circle(small, (fx, fy), 5, (0, 255, 0), -1)
-                    cv2.circle(small, (fx, fy), 8, (255, 255, 255), 1)
+
+                # Draw outline of detected hand contour (green if pointing, orange/amber if open hand)
+                last_cnt = getattr(self.tracker, "last_contour", None)
+                if last_cnt is not None:
+                    scale_x = pv_w / frame.shape[1]
+                    scale_y = pv_h / frame.shape[0]
+                    scaled_cnt = np.array(last_cnt * [scale_x, scale_y], dtype=np.int32)
+                    contour_color = (0, 230, 120) if is_pointing else (0, 140, 255)  # BGR
+                    cv2.drawContours(small, [scaled_cnt], -1, contour_color, 2)
+
+                # Draw yellow crosshair on fingertip when pointing
+                if is_pointing:
+                    for s in samples:
+                        fx = max(0, min(pv_w - 1, int(s.norm_x * pv_w)))
+                        fy = max(0, min(pv_h - 1, int(s.norm_y * pv_h)))
+                        cv2.circle(small, (fx, fy), 5, (0, 240, 255), -1)
+                        cv2.circle(small, (fx, fy), 8, (255, 255, 255), 1)
 
                 small_rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                 preview_surf = pygame.image.frombuffer(small_rgb.tobytes(), (pv_w, pv_h), "RGB")
@@ -134,6 +152,7 @@ class VisionWorker:
                 samples=samples,
                 has_hand=bool(samples),
                 preview_surface=preview_surf,
+                status_label=status_label,
             )
             self.mailbox.publish(snapshot)
 

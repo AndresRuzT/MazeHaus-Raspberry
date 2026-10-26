@@ -121,6 +121,7 @@ class MazeRenderer:
         camera_preview: Any,
         hand_detected: bool,
         target_center: tuple[float, float] | None = None,
+        status_label: str = "BUSCANDO DEDO",
     ) -> None:
         """Render stylish, welcoming calibration screen aligned with arena center."""
         surface.fill(COLOR_BG)
@@ -189,7 +190,16 @@ class MazeRenderer:
             pygame.draw.circle(surface, (255, 255, 255), (hx, hy), 4)
 
         # PiP preview in top right
-        self._draw_camera_pip(surface, camera_preview, hand_detected, x=w - 240, y=20, w=220, h=165)
+        self._draw_camera_pip(
+            surface,
+            camera_preview,
+            hand_detected,
+            x=w - 240,
+            y=20,
+            w=220,
+            h=165,
+            status_text=status_label,
+        )
 
     def draw_countdown(self, surface: pygame.Surface, count_number: int) -> None:
         """Countdown badge overlay before maze begins."""
@@ -220,6 +230,7 @@ class MazeRenderer:
         hand_detected: bool = False,
         sidebar_x: int = 1015,
         sidebar_w: int = 245,
+        status_label: str = "BUSCANDO DEDO",
     ) -> None:
         """Render complete maze arena on left, and zero-overlap HUD sidebar on right."""
         # 1. Clear full window background
@@ -313,6 +324,7 @@ class MazeRenderer:
             hand_detected=hand_detected,
             sidebar_x=sidebar_x,
             sidebar_w=sidebar_w,
+            status_label=status_label,
         )
 
         # 12. Victory Banner overlay if finished
@@ -416,6 +428,7 @@ class MazeRenderer:
         hand_detected: bool,
         sidebar_x: int,
         sidebar_w: int,
+        status_label: str = "BUSCANDO DEDO",
     ) -> None:
         """Render the sleek right-side HUD panel."""
         sb_h = surface.get_height() - 24
@@ -433,7 +446,16 @@ class MazeRenderer:
         pip_h = int(pip_w * 0.75)  # 4:3 ratio
         pip_x = sidebar_x + 12
         pip_y = 65
-        self._draw_camera_pip(surface, camera_preview, hand_detected, pip_x, pip_y, pip_w, pip_h)
+        self._draw_camera_pip(
+            surface,
+            camera_preview,
+            hand_detected,
+            pip_x,
+            pip_y,
+            pip_w,
+            pip_h,
+            status_text=status_label,
+        )
 
         # 2. Stats Card Container
         stats_y = pip_y + pip_h + 36
@@ -541,11 +563,11 @@ class MazeRenderer:
         y: int,
         w: int,
         h: int,
+        status_text: str | None = None,
     ) -> None:
         pip_rect = pygame.Rect(x, y, w, h)
 
         if camera_preview is not None and isinstance(camera_preview, pygame.Surface):
-            # Scale preview cleanly to fill pip_rect
             scaled = pygame.transform.smoothscale(camera_preview, (w, h))
             surface.blit(scaled, pip_rect)
         else:
@@ -553,8 +575,12 @@ class MazeRenderer:
             placeholder = self.small_font.render("Esperando Cámara...", True, COLOR_TEXT_MUTED)
             surface.blit(placeholder, placeholder.get_rect(center=pip_rect.center))
 
-        border_color = COLOR_START if hand_detected else (230, 130, 35)
-        status_text = "MANO DETECTADA" if hand_detected else "BUSCANDO DEDO"
+        if status_text is None:
+            status_text = "MANO DETECTADA" if hand_detected else "BUSCANDO DEDO"
+
+        border_color = (
+            COLOR_START if ("OK" in status_text or "DETECTADO" in status_text) else (230, 130, 35)
+        )
         pygame.draw.rect(surface, border_color, pip_rect, width=2, border_radius=6)
 
         # Status badge below preview

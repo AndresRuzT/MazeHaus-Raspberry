@@ -64,6 +64,7 @@ class InputSnapshot:
     timestamp: float
     pointers: dict[PlayerId, Pointer] = field(default_factory=dict)
     camera_preview: object | None = None
+    status_label: str = "BUSCANDO DEDO"
 
     def get_pointer(self, player_id: PlayerId) -> Pointer | None:
         return self.pointers.get(player_id)

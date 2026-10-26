@@ -117,6 +117,7 @@ class MazeScene(Scene):
 
     def update(self, dt: float, inputs: InputSnapshot) -> None:
         self.camera_preview = inputs.camera_preview
+        self.camera_status_label = inputs.status_label
         self.renderer.update_particles(dt)
 
         if self.is_paused:
@@ -196,6 +197,7 @@ class MazeScene(Scene):
                 camera_preview=self.camera_preview,
                 hand_detected=self.hand_detected,
                 target_center=self.get_arena_center(),
+                status_label=getattr(self, "camera_status_label", "BUSCANDO DEDO"),
             )
             return
 
@@ -209,6 +211,7 @@ class MazeScene(Scene):
             hand_detected=self.hand_detected,
             sidebar_x=self.sidebar_x,
             sidebar_w=self.sidebar_w,
+            status_label=getattr(self, "camera_status_label", "BUSCANDO DEDO"),
         )
 
         if self.phase == ScenePhase.COUNTDOWN:
