@@ -62,7 +62,7 @@ class RecordStore:
         except Exception as exc:
             logger.error(f"Failed to save record to {self.file_path}: {exc}")
 
-    def check_and_update(self, finish_time: float, holder: str = "JUGADOR") -> bool:
+    def check_and_update(self, finish_time: float, holder: str = "PLAYER") -> bool:
         """Update record if new time is faster. Returns True if new all-time record set."""
         if finish_time < self.current_record.best_time:
             import datetime

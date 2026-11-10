@@ -34,7 +34,7 @@ class RawDetectionSnapshot:
     samples: list[RawPointerSample]
     has_hand: bool
     preview_surface: Any = None
-    status_label: str = "BUSCANDO DEDO"
+    status_label: str = "LOOKING FOR HAND"
 
 
 class VisionWorker:
@@ -118,7 +118,9 @@ class VisionWorker:
             # Generate downscaled preview surface with tracking landmarks & skeleton
             preview_surf = None
             status_label = getattr(
-                self.tracker, "status_message", "BUSCANDO DEDO" if not samples else "DEDO DETECTADO"
+                self.tracker,
+                "status_message",
+                "LOOKING FOR HAND" if not samples else "HAND DETECTED (OK)",
             )
             is_pointing = getattr(self.tracker, "is_pointing", True)
             try:

@@ -35,7 +35,7 @@ class PlayerGameState:
     stun_duration_s: float = 0.4
 
     trail: list[tuple[float, float]] = field(default_factory=list)
-    max_trail_points: int = 500
+    max_trail_points: int = 50
 
     def __post_init__(self) -> None:
         start_center = self.layout.cell_to_pixel_center(*self.maze_def.start_cell)
@@ -84,9 +84,17 @@ class PlayerGameState:
 
         # Valid movement along corridor
         self.current_pos = target_pos
-        self.trail.append(target_pos)
-        if len(self.trail) > self.max_trail_points:
-            self.trail.pop(0)
+        if not self.trail:
+            self.trail.append(target_pos)
+        else:
+            last_x, last_y = self.trail[-1]
+            dist = math.hypot(target_pos[0] - last_x, target_pos[1] - last_y)
+            if dist >= 5.0:
+                self.trail.append(target_pos)
+                if len(self.trail) > self.max_trail_points:
+                    self.trail.pop(0)
+            else:
+                self.trail[-1] = target_pos
 
         # Check if reached exit
         exit_cell = self.maze_def.exit_cell

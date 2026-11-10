@@ -65,7 +65,7 @@ def test_maze_scene_calibration_flow() -> None:
     # Test reset toggle (R)
     r_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r)
     scene.handle_event(r_event)
-    assert scene.phase == ScenePhase.PLAYING
+    assert scene.phase == ScenePhase.CALIBRATING
 
     # Test calibrate shortcut (C)
     c_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c)
@@ -113,9 +113,41 @@ def test_maze_scene_gameplay_victory_and_record() -> None:
 
     # Update scene to process finish logic
     scene.has_processed_finish = False
-    scene.is_new_record = scene.record_store.check_and_update(scene.player_state.elapsed_time)
+    scene.is_new_record = scene.record_store.check_and_update(scene.player_state.total_score_time)
+    scene.finish_countdown = 20.0
     scene.renderer.spawn_celebration_fireworks(800, 600, count=10)
 
     # Render victory screen
     scene.draw(surface)
 
+    # Simulate 20s countdown expiration
+    ptr = Pointer(
+        player_id=PlayerId.PLAYER_1,
+        position=Point2D(x=exit_pos[0], y=exit_pos[1]),
+        state=TrackingState.TRACKED,
+    )
+    inputs = InputSnapshot(timestamp=50.0, pointers={PlayerId.PLAYER_1: ptr})
+    scene.update(20.5, inputs)
+
+    # Auto-resets to CALIBRATING attract mode
+    assert scene.phase == ScenePhase.CALIBRATING
+
+
+def test_create_input_provider_mouse_fallback() -> None:
+    from fingermaze.app import create_input_provider
+
+    cfg = GameConfig(use_mouse_fallback=True)
+    provider = create_input_provider(cfg)
+    assert isinstance(provider, MouseInputProvider)
+    provider.close()
+
+
+def test_create_input_provider_camera_failure_fallback() -> None:
+    from fingermaze.app import create_input_provider
+
+    # Invalid device index forces camera failure and triggers graceful mouse fallback
+    cfg = GameConfig(use_mouse_fallback=False)
+    cfg.camera.device_index = 99999
+    provider = create_input_provider(cfg)
+    assert isinstance(provider, MouseInputProvider)
+    provider.close()

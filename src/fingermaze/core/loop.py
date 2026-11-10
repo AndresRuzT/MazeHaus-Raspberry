@@ -37,17 +37,21 @@ class GameLoop:
         flags = pygame.DOUBLEBUF
         if disp_cfg.fullscreen:
             flags |= pygame.FULLSCREEN
-
-        screen = pygame.display.set_mode((disp_cfg.width, disp_cfg.height), flags)
+            # Pass (0, 0) in fullscreen to match native monitor/TV resolution
+            screen = pygame.display.set_mode((0, 0), flags)
+        else:
+            screen = pygame.display.set_mode((disp_cfg.width, disp_cfg.height), flags)
         pygame.display.set_caption("FingerMaze (MazeHaus)")
+
+        actual_w, actual_h = screen.get_size()
+        if hasattr(self.scene, "on_display_size"):
+            self.scene.on_display_size(actual_w, actual_h)
 
         self.running = True
         target_fps = disp_cfg.target_fps
         last_time = time.monotonic()
 
-        logger.info(
-            f"Main loop running at target {target_fps} FPS on {disp_cfg.width}x{disp_cfg.height}"
-        )
+        logger.info(f"Main loop running at target {target_fps} FPS on {actual_w}x{actual_h}")
 
         try:
             while self.running:
@@ -63,6 +67,9 @@ class GameLoop:
                     if event.type == pygame.QUIT:
                         self.running = False
                         break
+                    elif event.type == pygame.VIDEORESIZE:
+                        if hasattr(self.scene, "on_display_size"):
+                            self.scene.on_display_size(event.w, event.h)
                     self.scene.handle_event(event)
 
                 # Poll input provider (non-blocking)

@@ -53,3 +53,4 @@ def test_player_game_state_lifecycle() -> None:
     exit_pos = layout.cell_to_pixel_center(*maze_def.exit_cell)
     state.update_position(exit_pos, collides=False)
     assert state.status == GameStatus.FINISHED
+    assert state.total_score_time == 2.0 + (1 * 2.0)

@@ -48,9 +48,16 @@ htmlcov/
 *.png
 *.csv
 
+# Allow tracked documentation assets
+!assets/
+!assets/**
+
 # OS and editor files
 .DS_Store
 .idea/
 .vscode/
 *.swp
 *~
+
+# Runtime data
+data/*.json

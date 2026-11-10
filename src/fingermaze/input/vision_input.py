@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fingermaze.core.ports import InputProvider
-from fingermaze.core.types import InputSnapshot, PlayerId, Point2D, Pointer, TrackingState
+from fingermaze.core.types import InputSnapshot, PlayerId, Point2D, Pointer, TrackingState, Viewport
 from fingermaze.input.filters import OneEuroFilter2D
 from fingermaze.input.mailbox import LatestValueMailbox
 from fingermaze.input.mapping import CoordinateMapper
@@ -40,12 +40,18 @@ class VisionInputProvider(InputProvider):
     def calibrate_center(self, norm_x: float, norm_y: float) -> None:
         """Calibrate the natural center point of the hand in camera space."""
         self.mapper.calibrate_center(norm_x, norm_y)
+        for filt in self.filters.values():
+            filt.reset()
+
+    def update_viewport(self, viewport: Viewport) -> None:
+        """Update target screen arena viewport on window resize or resolution switch."""
+        self.mapper.viewport = viewport
 
     def poll(self, now: float) -> InputSnapshot:
         snapshot, _ = self.mailbox.read()
         current_pointers: dict[PlayerId, Pointer] = {}
         preview_surf = snapshot.preview_surface if snapshot is not None else None
-        status_label = snapshot.status_label if snapshot is not None else "BUSCANDO DEDO"
+        status_label = snapshot.status_label if snapshot is not None else "LOOKING FOR HAND"
 
         if snapshot is not None and snapshot.has_hand:
             for sample in snapshot.samples:

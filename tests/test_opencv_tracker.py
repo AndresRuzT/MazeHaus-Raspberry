@@ -18,8 +18,8 @@ def test_opencv_hand_tracker_ignores_face_in_upper_frame() -> None:
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     import cv2
 
-    ycrcb_skin = np.array([120, 150, 100], dtype=np.uint8)
-    bgr_skin = cv2.cvtColor(np.uint8([[ycrcb_skin]]), cv2.COLOR_YCrCb2BGR)[0][0]
+    ycrcb_skin = np.array([[[120, 150, 100]]], dtype=np.uint8)
+    bgr_skin = cv2.cvtColor(ycrcb_skin, cv2.COLOR_YCrCb2BGR)[0][0]
 
     # Draw skin patch located exclusively in the upper 30% of the frame (face/forehead)
     cv2.circle(frame, (320, 80), 40, (int(bgr_skin[0]), int(bgr_skin[1]), int(bgr_skin[2])), -1)
@@ -36,8 +36,8 @@ def test_opencv_hand_tracker_detects_tip() -> None:
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     import cv2
 
-    ycrcb_skin = np.array([120, 150, 100], dtype=np.uint8)
-    bgr_skin = cv2.cvtColor(np.uint8([[ycrcb_skin]]), cv2.COLOR_YCrCb2BGR)[0][0]
+    ycrcb_skin = np.array([[[120, 150, 100]]], dtype=np.uint8)
+    bgr_skin = cv2.cvtColor(ycrcb_skin, cv2.COLOR_YCrCb2BGR)[0][0]
 
     # Draw an arm/finger extending into the lower half
     cv2.rectangle(
@@ -66,8 +66,8 @@ def test_opencv_hand_tracker_open_hand_detection() -> None:
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     import cv2
 
-    ycrcb_skin = np.array([120, 150, 100], dtype=np.uint8)
-    bgr_skin = cv2.cvtColor(np.uint8([[ycrcb_skin]]), cv2.COLOR_YCrCb2BGR)[0][0]
+    ycrcb_skin = np.array([[[120, 150, 100]]], dtype=np.uint8)
+    bgr_skin = cv2.cvtColor(ycrcb_skin, cv2.COLOR_YCrCb2BGR)[0][0]
 
     # Draw a wide block (apex_width > 50) simulating an open palm / spread fingers
     cv2.rectangle(
@@ -79,5 +79,5 @@ def test_opencv_hand_tracker_open_hand_detection() -> None:
     # Wide apex detected as open hand, not pointing finger
     assert tracker.is_pointing is False
     assert detections[0].confidence < 0.5
-    assert "APUNTA" in tracker.status_message
+    assert "POINT" in tracker.status_message
     tracker.close()

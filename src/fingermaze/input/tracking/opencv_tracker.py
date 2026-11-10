@@ -39,7 +39,7 @@ class OpenCVHandTracker:
         # Diagnostic state for camera PiP overlay
         self.last_contour: npt.NDArray[Any] | None = None
         self.is_pointing: bool = True
-        self.status_message: str = "BUSCANDO DEDO"
+        self.status_message: str = "LOOKING FOR HAND"
 
     def process_frame(self, frame: Frame) -> list[HandDetection]:
         orig_h, orig_w = frame.shape[:2]
@@ -82,7 +82,7 @@ class OpenCVHandTracker:
         contours, _ = cv2.findContours(clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             self.last_contour = None
-            self.status_message = "SIN MANO EN CÁMARA"
+            self.status_message = "SHOW HAND TO CAMERA"
             return []
 
         # 7. Spatial Hand Prior & Face/Forehead Exclusion Filter:
@@ -102,7 +102,7 @@ class OpenCVHandTracker:
 
         if not hand_candidates:
             self.last_contour = None
-            self.status_message = "MUESTRA TU MANO AL FRENTE"
+            self.status_message = "SHOW HAND TO CAMERA"
             return []
 
         # 8. Candidate Selection:
@@ -164,10 +164,10 @@ class OpenCVHandTracker:
         is_open_hand = deep_valleys >= 3 or apex_width > 48.0
         if is_open_hand:
             self.is_pointing = False
-            self.status_message = "CIERRA EL PUÑO Y APUNTA CON 1 DEDO"
+            self.status_message = "POINT WITH INDEX FINGER"
         else:
             self.is_pointing = True
-            self.status_message = "DEDO ÍNDICE (OK)"
+            self.status_message = "INDEX FINGER (OK)"
 
         # 10. Sub-Pixel Apex Extraction:
         # Centroid of top cluster within 12 pixels of highest point to eliminate discrete pixel jitter

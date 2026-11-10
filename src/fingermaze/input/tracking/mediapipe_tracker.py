@@ -43,7 +43,7 @@ class MediaPipeHandTracker:
         self.min_tracking_confidence = min_tracking_confidence
 
         self.is_pointing: bool = True
-        self.status_message: str = "BUSCANDO DEDO"
+        self.status_message: str = "LOOKING FOR HAND"
         self.last_landmarks_normalized: list[tuple[float, float]] | None = None
 
         BaseOptions = mp.tasks.BaseOptions
@@ -75,7 +75,7 @@ class MediaPipeHandTracker:
 
         if not result.hand_landmarks:
             self.last_landmarks_normalized = None
-            self.status_message = "MUESTRA TU MANO"
+            self.status_message = "SHOW HAND TO CAMERA"
             return detections
 
         for hand_lms in result.hand_landmarks:
@@ -114,15 +114,15 @@ class MediaPipeHandTracker:
 
                 if is_open:
                     self.is_pointing = False
-                    self.status_message = "CIERRA EL PUÑO Y APUNTA CON 1 DEDO"
+                    self.status_message = "POINT WITH INDEX FINGER"
                     gest_conf = 0.3
                 elif is_pointing:
                     self.is_pointing = True
-                    self.status_message = "DEDO ÍNDICE (OK)"
+                    self.status_message = "INDEX FINGER (OK)"
                     gest_conf = 1.0
                 else:
                     self.is_pointing = True
-                    self.status_message = "DEDO DETECTADO (OK)"
+                    self.status_message = "HAND DETECTED (OK)"
                     gest_conf = 0.9
 
                 self.last_landmarks_normalized = [(lm.x, lm.y) for lm in landmarks]

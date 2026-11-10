@@ -46,11 +46,8 @@ def create_input_provider(config: GameConfig) -> InputProvider:
         logger.info("Using mouse input provider (fallback mode)")
         return MouseInputProvider()
 
-    # Attempt to initialize OpenCV camera and MediaPipe tracker
+    # Attempt to initialize OpenCV camera and tracker
     model_path = Path(config.tracking.model_path)
-    if not model_path.exists():
-        logger.warning(f"Model file {model_path} not found. Falling back to mouse input.")
-        return MouseInputProvider()
 
     try:
         camera = OpenCVCameraSource(
@@ -61,7 +58,7 @@ def create_input_provider(config: GameConfig) -> InputProvider:
             mirror=config.camera.mirror,
         )
 
-        # Initialize Google MediaPipe Hand Landmarker (ARM-accelerated via XNNPACK in mediapipe 0.10.18)
+        # Initialize Google MediaPipe Hand Landmarker if model file exists, else native OpenCV tracker
         if model_path.exists():
             logger.info(
                 "Initializing Google MediaPipe Hand Landmarker (XNNPACK CPU accelerated)..."
@@ -79,7 +76,7 @@ def create_input_provider(config: GameConfig) -> InputProvider:
                 )
                 tracker = OpenCVHandTracker()
         else:
-            logger.info("Model file not found. Using native OpenCV Tracker.")
+            logger.info("MediaPipe model file not found. Using native OpenCV Tracker.")
             tracker = OpenCVHandTracker()
 
         mailbox: LatestValueMailbox[RawDetectionSnapshot] = LatestValueMailbox()
