@@ -2,156 +2,109 @@
 
 ![MazeHaus Gameplay](assets/MazeHaus.png)
 
-MazeHaus (also referred to as FingerMaze) is a touchless, computer-vision arcade maze game optimized to run natively on a Raspberry Pi 4. Players navigate an index finger in front of a camera to guide a luminous pointer through a labyrinth from entrance to exit. The objective is to achieve the fastest completion time while avoiding collisions with maze walls. The system maintains an all-time record leaderboard persisted locally.
+MazeHaus is a touchless computer vision arcade game designed for the Raspberry Pi 4 and modern desktop computers. Players guide an index finger in front of a camera to navigate a glowing pointer through an interactive maze. The goal is to reach the exit as quickly as possible while avoiding wall collisions and clearing checkpoints. Best times are saved to a local leaderboard.
 
-## Architecture and Technical Design
+## Key Features
 
-The codebase adheres to a hexagonal (ports and adapters) architecture, ensuring pure domain logic remains isolated from I/O devices, rendering engines, and machine learning runtimes.
+* **Touchless Interaction:** Natural index finger tracking using Google MediaPipe Hand Landmarker with automatic fallback to an OpenCV skin tracker if model weights are not present.
+* **Smooth Dual-Thread Architecture:** Hand tracking runs in a dedicated background worker thread at camera speed, while the Pygame display loop renders at a steady 60 frames per second with zero stutter.
+* **Adaptive Motion Smoothing:** A dynamic One Euro filter removes hand tremors during subtle movements while maintaining instantaneous responsiveness during quick gestures.
+* **Smart Calibration:** An initial center calibration step registers the natural resting position of the player hand, preventing shoulder strain during longer sessions.
+* **Precise Physics:** Continuous collision detection catches fast movements across walls, applying configurable time penalties and resetting to the last cleared checkpoint.
+* **Development Ready:** Instant mouse fallback mode makes it easy to test and debug on laptops without a camera.
 
-```mermaid
-flowchart TD
-    subgraph Input["Input Devices"]
-        Cam["USB / CSI Camera (V4L2)"]
-        Mouse["Mouse (Fallback Mode)"]
-    end
+## System Overview
 
-    subgraph VisionPipeline["Vision Worker Thread (15 to 30 FPS)"]
-        Capture["Frame Capture"]
-        Mirror["Horizontal Mirroring"]
-        TrackerChoice{"Tracker Backend"}
-        MP["Google MediaPipe Hand Landmarker\n(ARM NEON / XNNPACK Acceleration)"]
-        CV["OpenCV Skin & Apex Tracker\n(Morphological Fallback)"]
-        Mailbox[("Latest-Value Mailbox\n(Single-Slot, O(1) Non-blocking)")]
-    end
-
-    subgraph MainThread["Main Game Loop Thread (60 FPS)"]
-        Events["Pygame Event Dispatcher"]
-        Mapper["Coordinate Mapper\n& Center Calibration"]
-        Filter["2D One Euro Filter\n(Adaptive Tremor Elimination)"]
-        Collision["Continuous Collision Detection\n(Ray Marching in 3x3 Neighborhood)"]
-        Renderer["Pygame-ce Renderer\n(Cyber-Neon Visuals & HUD)"]
-    end
-
-    subgraph Output["Output & Persistence"]
-        Display["Display Monitor / Kiosk TV"]
-        Records[("JSON Record Store\ndata/records.json")]
-    end
-
-    Cam --> Capture --> Mirror --> TrackerChoice
-    TrackerChoice -->|Model Found| MP --> Mailbox
-    TrackerChoice -->|Fallback| CV --> Mailbox
-    Mouse --> Events
-
-    Mailbox --> Mapper --> Filter --> Collision --> Renderer
-    Events --> Collision
-    Renderer --> Display
-    Collision -.->|New Record| Records
+```
+Camera Input -> Background Vision Thread -> Lockless Mailbox -> Main Render Loop (60 FPS) -> Display
 ```
 
-### Decoupled Concurrency Pipeline
-- **Vision Worker Thread:** Continuously captures frames via OpenCV (`V4L2`), processes hand landmark inference at camera frame rates (15 to 30 Hz), and publishes lightweight snapshots into a lock-protected `LatestValueMailbox`. Frame buffer size is forced to 1 to eliminate queue buildup and input latency.
-- **Rendering Thread:** Runs a fixed-timestep Pygame-ce game loop locked at 60 FPS. It reads the latest available pointer snapshot without blocking. If vision frames drop, rendering continues smoothly without jitter.
+* **Vision Pipeline:** Captures webcam frames, applies horizontal mirroring, tracks index fingertip coordinates, and updates a single-slot mailbox with the latest detection.
+* **Rendering Engine:** Polls input without waiting or blocking, maps coordinates to the maze arena, checks wall collisions, and updates particle effects and HUD elements.
+* **Local Persistence:** Lap times and records are saved to `data/records.json` after every successful run.
 
-### Computer Vision Backends
-- **Primary Tracker (Google MediaPipe):** Utilizes the MediaPipe Hand Landmarker task with XNNPACK CPU acceleration on ARM NEON architectures to extract 21 3D hand landmarks. Gesture heuristics distinguish an extended index finger from open-hand rests.
-- **Fallback Tracker (OpenCV Spatial Skin Segmenter):** Operates without neural network weights in 1 to 3 ms on Raspberry Pi CPUs. Employs dual-color-space segmentation (HSV + YCrCb), CLAHE lighting normalization, morphological cleaning, spatial priors to exclude human faces, and apex clustering for sub-pixel fingertip tracking.
-- **Mouse Fallback:** Seamless fallback mode for testing without video capture hardware.
+## Quick Start
 
-### Signal Conditioning and Coordinate Mapping
-- **Adaptive Filtering:** A 2D One Euro Filter dynamically adjusts cutoff frequencies based on fingertip velocity, eliminating high-frequency tremor while maintaining instant responsiveness during rapid movements. A noise deadband prevents micro-jitter when holding position.
-- **Dynamic Center Calibration:** During the kiosk attract phase, dwelling in the central circle calibrates the user's natural resting hand position as the maze center point, preventing physical shoulder fatigue.
+### Installation
 
-### Game State and Session Flow
+Clone the repository and set up your virtual environment using Python 3.11 or 3.12:
 
-```mermaid
-stateDiagram-v2
-    [*] --> Calibrating: Application Launch / Session Reset
-
-    Calibrating --> Countdown: Dwell on Center Target (0.65s)
-    Countdown --> WaitingForTouch: Countdown Reaches Zero
-
-    WaitingForTouch --> Playing: Touch START or Current Checkpoint
-    Playing --> WaitingForTouch: Tracking Signal Lost (Safe Pause)
-
-    Playing --> PenaltyStun: Wall Collision Detected
-    PenaltyStun --> WaitingForTouch: Stun Recovery Expired (0.4s)
-
-    Playing --> Finished: Reach EXIT Cell
-    Finished --> Calibrating: 20-Second Kiosk Timer Expires
-
-    WaitingForTouch --> Calibrating: Inactivity Timeout (25s)
+```bash
+git clone https://github.com/AndresRuzT/MazeHaus-Raspberry.git
+cd MazeHaus-Raspberry
 ```
 
-### Game Physics and Scoring
-- **Continuous Collision Detection (CCD):** Wall collisions are evaluated by continuous ray sampling between consecutive frame coordinates against neighboring wall segments (O(1) localized 3x3 grid query), preventing tunneling at high finger speeds.
-- **Checkpoints and Stun Penalty:** Hitting a wall triggers a brief stun effect, resets the player to their last cleared checkpoint, and applies a configurable time penalty (default: 2.5 seconds).
-- **Historic Speedrun Records:** Official scores account for raw completion time plus accumulated collision penalties. New records are atomically stored in `data/records.json`.
+#### Using Standard Pip
 
-## Hardware Requirements
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/download_model.py
+```
 
-- **Processor:** Raspberry Pi 4 Model B (2 GB RAM or higher) or standard x86_64/ARM64 PC.
-- **Camera:** Standard USB V4L2 webcam or Raspberry Pi Camera Module (CSI).
-- **Display:** Monitor or TV running at 1280x720 or 1920x1080 resolution.
+#### Using uv
 
-## Installation
+```bash
+uv sync
+uv run python scripts/download_model.py
+```
 
-The project uses `uv` for fast, reproducible dependency management.
+#### Automated Setup for Raspberry Pi
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/AndresRuzTP/MazeHaus-Raspberry.git
-   cd MazeHaus-Raspberry
-   ```
+If you are running Raspberry Pi OS, you can run the automated setup script to install system packages and project dependencies in one step:
 
-2. Run the automated Raspberry Pi setup script:
-   ```bash
-   chmod +x scripts/setup_raspberry.sh
-   ./scripts/setup_raspberry.sh
-   ```
+```bash
+chmod +x scripts/setup_raspberry.sh
+./scripts/setup_raspberry.sh
+```
 
-   Alternatively, install manually using `uv`:
-   ```bash
-   uv sync
-   uv run python scripts/download_model.py
-   ```
+### Environment Check
 
-3. Verify environment and camera recognition:
-   ```bash
-   uv run python scripts/check_environment.py
-   ```
+Confirm your camera, Python version, and model files are ready:
+
+```bash
+python scripts/check_environment.py
+```
 
 ## Running the Application
 
-- **Standard Launch (Camera Vision):**
+* **Standard Vision Mode:**
   ```bash
-  uv run python -m fingermaze
+  python -m fingermaze
   ```
 
-- **Fullscreen Kiosk Mode:**
+* **Fullscreen Kiosk Mode:**
   ```bash
-  uv run python -m fingermaze --fullscreen
+  python -m fingermaze --fullscreen
   ```
 
-- **Mouse Input Mode (Development / Headless):**
+* **Mouse Fallback Mode (No Camera Required):**
   ```bash
-  uv run python -m fingermaze --mouse
+  python -m fingermaze --mouse
   ```
 
-- **Custom Maze Grid:**
+* **Custom Maze Dimensions:**
   ```bash
-  uv run python -m fingermaze --cols 16 --rows 10
+  python -m fingermaze --cols 14 --rows 9
   ```
 
-### Controls and Shortcuts
-- **Dwell on Center Circle:** Calibrates resting hand position and starts the 3-second countdown.
-- **Touch Green Indicator:** Activates real-time movement tracing at the maze entrance or checkpoint.
-- **R / C:** Reset current game session to calibration screen.
-- **P:** Pause / Resume game.
-- **ESC:** Quit application.
+## Gameplay and Shortcuts
+
+1. **Center Calibration:** Hold your index finger over the central target circle to calibrate your resting hand position.
+2. **Start the Run:** When the countdown ends, touch the green START box to begin the timer.
+3. **Navigate the Maze:** Guide your pointer through open paths to reach the green EXIT cell.
+4. **Wall Collisions:** Touching a wall adds a 2.5 second penalty and places you at your latest cleared checkpoint.
+
+### Keyboard Shortcuts
+
+* **ESC:** Quit the game and release camera devices.
+* **R or C:** Reset the current session to the calibration screen.
+* **P:** Pause or resume gameplay.
 
 ## Configuration
 
-System parameters can be adjusted directly in `config.toml`:
+Settings can be customized in `config.toml`:
 
 ```toml
 [display]
@@ -167,15 +120,6 @@ height = 480
 fps = 30
 mirror = true
 
-[tracking]
-model_path = "models/hand_landmarker.task"
-num_hands = 1
-min_detection_confidence = 0.5
-min_tracking_confidence = 0.5
-hand_lost_timeout_s = 1.0
-filter_min_cutoff = 1.0
-filter_beta = 0.05
-
 [maze]
 cols = 10
 rows = 7
@@ -184,15 +128,22 @@ cursor_radius = 14
 wall_penalty_seconds = 2.5
 ```
 
-## Testing and Verification
+## Additional Documentation
 
-Run the test suite with coverage reporting:
+* For complete setup, operational, and troubleshooting steps, read [USAGE.md](USAGE.md).
+* For detailed hardware and software dependencies, see [REQUIREMENTS.md](REQUIREMENTS.md).
+
+## Testing and Quality Checks
+
+Run the automated test suite:
+
 ```bash
-uv run pytest --cov=fingermaze
+pytest
 ```
 
-Execute code formatting and static type checks:
+Run code style and type verification:
+
 ```bash
-uv run ruff check .
-uv run mypy src tests
+ruff check .
+mypy src tests
 ```

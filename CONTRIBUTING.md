@@ -8,8 +8,8 @@ By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## 1. Getting started
 
 ```bash
-git clone https://github.com/<organisation>/fingermaze.git
-cd fingermaze
+git clone https://github.com/AndresRuzT/MazeHaus-Raspberry.git
+cd MazeHaus-Raspberry
 uv sync                      # create the environment from uv.lock
 uv run pre-commit install --install-hooks
 uv run pre-commit install --hook-type commit-msg
@@ -39,18 +39,17 @@ Quality gates, all enforced in CI and by the pre-commit hooks:
 - **Short-lived branches** named `<type>/<short-description>`, for example `feat/one-euro-filter`
   or `fix/penalty-double-count`.
 - **Issues first** for anything non-trivial. Reference requirement identifiers
-  (for example `FR-07`) from [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+  from [REQUIREMENTS.md](REQUIREMENTS.md).
 - **Small pull requests.** One logical change per pull request; each commit must build and pass tests.
-- **Architecture decisions** that change a port, a dependency or the concurrency model require an ADR in
-  `docs/adr/` in the same pull request.
+- **Architecture decisions** that change a port, a dependency or the concurrency model require an ADR
+  in the same pull request.
 
 ### Definition of done
 
 - [ ] Code is typed, linted and formatted; all gates pass.
 - [ ] Behaviour is covered by tests (unit, and integration where a scene or adapter is involved).
 - [ ] Public APIs have docstrings; user-visible behaviour is documented.
-- [ ] No new dependency without justification in the pull request and in `docs/TECH_STACK.md`.
-- [ ] Performance-sensitive changes include a `scripts/benchmark.py` result from a Raspberry Pi.
+- [ ] No new dependency without justification in the pull request and in `TECH_STACK.md`.
 - [ ] The commit history follows the convention below.
 
 ## 3. Commit convention
